@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Dev Lambda Functions for Evershift
+
+Globals:
+  Api:
+    Cors:
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: "'*'"  # dev only, change to domain in prod
+      AllowCredentials: false
+
+Resources:
+  PostUserDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: post_user_data_dev
+      Handler: bootstrap
+      Runtime: provided.al2023
+      CodeUri: ./post_user_data/
+      Timeout: 30
+      # Role: arn:aws:iam::<your-account-id>:role/lambda_execution_role
+      Environment:
+        Variables:
+          DB_HOST: "evershift-dev-db.c7qysuy0ecf8.us-east-2.rds.amazonaws.com"
+          DB_PORT: "5432"
+          DB_NAME: "evershift"
+          DB_USER: "postgres"
+          DB_PASSWORD: "postgres"
+          DB_SSLMODE: "require"
+          DEBUG_MODE: "true"
+      Events:
+        PostAPI:
+          Type: Api
+          Properties:
+            Path: /post-user
+            Method: post
+      AutoPublishAlias: live
+      DeploymentPreference:
+        Type: AllAtOnce
+    Metadata:
+      BuildMethod: go1.x
+      BuildProperties:
+        Source: 
+          - post_user_data
+          - certs
+
+  GetUserDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: get_user_data_dev
+      Handler: bootstrap
+      Runtime: provided.al2023
+      CodeUri: get_user_data/
+      Timeout: 30
+      # Role: arn:aws:iam::<your-account-id>:role/lambda_execution_role
+      Environment:
+        Variables:
+          DB_HOST: "evershift-dev-db.c7qysuy0ecf8.us-east-2.rds.amazonaws.com"
+          DB_PORT: "5432"
+          DB_NAME: "evershift"
+          DB_USER: "postgres"
+          DB_PASSWORD: "postgres"
+          DB_SSLMODE: "require"
+      Events:
+        GetAPI:
+          Type: Api
+          Properties:
+            Path: /get-user-data
+            Method: get
+    Metadata:
+      BuildMethod: go1.x
+
+Outputs:
+  ApiGatewayApi:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiUrl"
