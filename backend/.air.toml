@@ -1,0 +1,16 @@
+[build]
+  # Command to build the app
+  cmd = "go build -o ./tmp/main ./cmd/api"
+  # Binary to watch 
+  bin = "./tmp/main"
+  # Working directory
+  dir = "."
+  # Patterns to watch
+  include_ext = ["go"]
+  # Exclude files
+  exclude_dir = ["vendor", "tmp"]
+  # Command to run after build
+  run_after_build = "chmod +x ./tmp/main"
+
+[log]
+  level = "debug"
