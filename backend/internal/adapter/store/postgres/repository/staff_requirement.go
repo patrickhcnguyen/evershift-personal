@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/google/uuid"
@@ -59,12 +60,21 @@ func (r *StaffRequirementRepository) DeleteStaffRequirement(ctx context.Context,
 func (r *StaffRequirementRepository) GetRate(ctx context.Context, staffType string, location string) (float64, error) {
 	var rate models.Rate
 	err := r.db.WithContext(ctx).
-		Where("staff_type = ? AND branch_id = (SELECT closest_branch_id FROM requests WHERE event_location = ? LIMIT 1)",
-			staffType, location).
+		Where("staff_type = ? AND branch_id = ?", staffType, location).
 		First(&rate).Error
+
 	if err != nil {
-		return 0, err
+		// If no specific rate found for this branch/staff type, try to find a default rate
+		// from any branch for this staff type as fallback
+		err = r.db.WithContext(ctx).
+			Where("staff_type = ?", staffType).
+			First(&rate).Error
+
+		if err != nil {
+			return 0, fmt.Errorf("no rate found for staff type %s in branch %s", staffType, location)
+		}
 	}
+
 	return rate.HourlyRate, nil
 }
 

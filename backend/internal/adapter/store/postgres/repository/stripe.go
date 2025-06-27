@@ -108,7 +108,7 @@ func (r *StripeRepository) CreateCheckoutSession(ctx context.Context, invoice *m
 	}
 
 	params := &stripe.CheckoutSessionParams{
-		SuccessURL: stripe.String("http://localhost:8080/"),
+		SuccessURL: stripe.String("https://evershift-personal.vercel.app/"),
 		// CancelURL:  stripe.String("http://localhost:8080/cancel"),
 		Mode:          stripe.String(string(stripe.CheckoutSessionModePayment)),
 		LineItems:     lineItems,
