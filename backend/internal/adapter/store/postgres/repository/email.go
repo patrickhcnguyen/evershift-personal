@@ -56,7 +56,7 @@ func (r *EmailRepository) SendEmail(ctx context.Context, invoice *models.Invoice
 	subject := fmt.Sprintf("Request #%s from Evershift", requestID)
 
 	message := mailgun.NewMessage(r.from, subject, "", clientEmail)
-	message.SetHtml(htmlBody)
+	message.SetHTML(htmlBody)
 	message.SetReplyTo("Evershift Support <support@evershift.co>")
 
 	_, _, err := r.mg.Send(ctx, message)

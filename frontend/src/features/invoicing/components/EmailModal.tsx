@@ -79,6 +79,7 @@ ${adminName}`;
     setIsLoading(true)
     
     try {
+      await sendCustomEmail(requestId, emailContent, emailHeaders, selectedPDF);
       
       alert(`Email sent successfully!\n\nCustom email has been sent to ${clientName}${selectedPDF ? ' with PDF attached' : ''}.`)
       
