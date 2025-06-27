@@ -114,7 +114,10 @@ func (r *EmailRepository) SendCustomEmail(ctx context.Context, invoice *models.I
 	}
 
 	message := mailgun.NewMessage(r.from, subject, "", clientEmail)
-	message.SetHTML(emailContent)
+
+	// Wrap custom content in styled template
+	styledContent := r.generateCustomEmailHTML(emailContent, invoice.Request.FirstName+" "+invoice.Request.LastName, requestID)
+	message.SetHTML(styledContent)
 
 	if headers.ReplyTo != "" {
 		message.SetReplyTo(headers.ReplyTo)
@@ -424,4 +427,61 @@ func (r *EmailRepository) generateFollowUpEmailHTML(invoice *models.Invoice, cli
 		daysPastDue,
 		r.formatCurrency(invoice.Balance),
 	)
+}
+
+func (r *EmailRepository) generateCustomEmailHTML(emailContent, clientName, requestID string) string {
+	return fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      line-height: 1.6; 
+      color: #333; 
+      margin: 0; 
+      padding: 0; 
+    }
+    .container { 
+      max-width: 600px; 
+      margin: 0 auto; 
+      padding: 20px; 
+      background-color: #ffffff; 
+    }
+    .header { 
+      text-align: center; 
+      padding-bottom: 20px; 
+      border-bottom: 1px solid #eee; 
+      margin-bottom: 20px; 
+    }
+    .content { 
+      white-space: pre-wrap; 
+      margin: 20px 0; 
+    }
+    .footer { 
+      margin-top: 30px; 
+      padding-top: 20px; 
+      text-align: center; 
+      font-size: 12px; 
+      color: #777; 
+      border-top: 1px solid #eee; 
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Message from Evershift</h1>
+      <p>Request #%s</p>
+    </div>
+    
+    <div class="content">%s</div>
+    
+    <div class="footer">
+      <p>If you have any questions, please contact us at support@evershift.co</p>
+      <p>Thank you for your business!</p>
+    </div>
+  </div>
+</body>
+</html>`, requestID, emailContent)
 }
