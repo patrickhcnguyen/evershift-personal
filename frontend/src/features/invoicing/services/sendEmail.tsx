@@ -72,7 +72,7 @@ export const clearDraftEmail = (requestId: string): void => {
 
 export const sendInvoiceEmail = async (requestId: string): Promise<SendEmailResponse> => {
   try {
-    const response = await fetch(`http://localhost:3001/api/emails/send/${requestId}`, {
+    const response = await fetch(`https://evershift-personal.onrender.com/api/emails/send/${requestId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -114,7 +114,7 @@ export const sendCustomEmail = async (
       formData.append('invoicePDF', pdfFile);
     }
 
-    const response = await fetch(`http://localhost:3001/api/emails/send-custom/${requestId}`, {
+    const response = await fetch(`https://evershift-personal.onrender.com/api/emails/send-custom/${requestId}`, {
       method: 'POST',
       body: formData,
     });

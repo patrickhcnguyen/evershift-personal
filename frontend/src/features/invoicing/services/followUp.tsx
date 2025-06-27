@@ -22,7 +22,7 @@ export const updateInvoiceFollowUpDelay = async (
   delayDays: number
 ): Promise<FollowUpDelayResponse> => {
   try {
-    const response = await fetch(`http://localhost:3001/api/invoices/${invoiceId}/follow-up-delay`, {
+    const response = await fetch(`https://evershift-personal.onrender.com/api/invoices/${invoiceId}/follow-up-delay`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -48,7 +48,7 @@ export const triggerFollowUpsByDelay = async (
   delayMinutes: number
 ): Promise<FollowUpResponse> => {
   try {
-    const response = await fetch(`http://localhost:3001/api/admin/followups/trigger?delay_days=${delayMinutes}`, {
+    const response = await fetch(`https://evershift-personal.onrender.com/api/admin/followups/trigger?delay_days=${delayMinutes}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

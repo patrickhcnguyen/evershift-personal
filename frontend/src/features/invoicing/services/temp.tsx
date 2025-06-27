@@ -47,7 +47,7 @@ export function InvoiceCard() {
 
       setIsLoading(true);
       try {
-        const response = await fetch(`http://localhost:3001/api/invoices/${initialInvoiceFromState.id}`);
+        const response = await fetch(`https://evershift-personal.onrender.com/api/invoices/${initialInvoiceFromState.id}`);
         if (!response.ok) {
           throw new Error(`Failed to fetch invoice details: ${response.statusText}`);
         }
@@ -141,7 +141,7 @@ export function InvoiceCard() {
         po_edit_counter: shouldIncrementPOCounter ? (invoice.po_edit_counter || 0) + 1 : (invoice.po_edit_counter || 0),
       };
 
-      const response = await fetch(`http://localhost:3001/api/invoices/${invoice.id}`, {
+      const response = await fetch(`https://evershift-personal.onrender.com/api/invoices/${invoice.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatePayload),

@@ -83,9 +83,9 @@ export function InvoiceTable() {
       setAdminBranch(branchToFetch); 
       try {
         const [requestData, invoiceData] = await Promise.all([
-          fetch(`http://localhost:3001/api/requests/branch/${branchToFetch}`),
+          fetch(`https://evershift-personal.onrender.com/api/requests/branch/${branchToFetch}`),
           // fetch invoices to get amount, balance, and status
-          fetch(`http://localhost:3001/api/invoices/branch/${branchToFetch}`)
+          fetch(`https://evershift-personal.onrender.com/api/invoices/branch/${branchToFetch}`)
         ]);
         
         if (!requestData.ok) {

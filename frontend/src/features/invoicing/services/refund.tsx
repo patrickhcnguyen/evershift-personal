@@ -8,7 +8,7 @@ interface RefundError {
 
 export const refundInvoice = async (invoiceId: string): Promise<RefundResponse | RefundError> => {
     try {
-        const response = await fetch(`http://localhost:3001/api/stripe/refund-payment/${invoiceId}`, {
+        const response = await fetch(`https://evershift-personal.onrender.com/api/stripe/refund-payment/${invoiceId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

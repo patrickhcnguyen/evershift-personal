@@ -83,14 +83,14 @@ export function InvoiceCard() {
         customLineItemsData,
         requestData,
       ] = await Promise.all([
-        fetch(`http://localhost:3001/api/invoices/request/${requestId}`),
+        fetch(`https://evershift-personal.onrender.com/api/invoices/request/${requestId}`),
         fetch(
-          `http://localhost:3001/api/staff-requirements/request/${requestId}`
+          `https://evershift-personal.onrender.com/api/staff-requirements/request/${requestId}`
         ),
         fetch(
-          `http://localhost:3001/api/custom-line-items/request/${requestId}`
+          `https://evershift-personal.onrender.com/api/custom-line-items/request/${requestId}`
         ),
-        fetch(`http://localhost:3001/api/requests/${requestId}`),
+        fetch(`https://evershift-personal.onrender.com/api/requests/${requestId}`),
       ]);
 
       if (
