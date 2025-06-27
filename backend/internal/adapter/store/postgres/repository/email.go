@@ -55,7 +55,7 @@ func (r *EmailRepository) SendEmail(ctx context.Context, invoice *models.Invoice
 
 	subject := fmt.Sprintf("Request #%s from Evershift", requestID)
 
-	message := r.mg.NewMessage(r.from, subject, "", clientEmail)
+	message := mailgun.NewMessage(r.from, subject, "", clientEmail)
 	message.SetHtml(htmlBody)
 	message.SetReplyTo("Evershift Support <support@evershift.co>")
 
@@ -85,7 +85,7 @@ func (r *EmailRepository) SendEmailWithPaymentURL(ctx context.Context, invoice *
 
 	subject := fmt.Sprintf("Request #%s from Evershift", requestID)
 
-	message := r.mg.NewMessage(r.from, subject, "", clientEmail)
+	message := mailgun.NewMessage(r.from, subject, "", clientEmail)
 	message.SetHTML(htmlBody)
 	message.SetReplyTo("Evershift Support <support@evershift.co>")
 
@@ -113,7 +113,8 @@ func (r *EmailRepository) SendCustomEmail(ctx context.Context, invoice *models.I
 		subject = fmt.Sprintf("Request #%s from Evershift", requestID)
 	}
 
-	message := r.mg.NewMessage(r.from, subject, emailContent, clientEmail)
+	message := mailgun.NewMessage(r.from, subject, "", clientEmail)
+	message.SetHTML(emailContent)
 
 	if headers.ReplyTo != "" {
 		message.SetReplyTo(headers.ReplyTo)
@@ -319,7 +320,7 @@ func (r *EmailRepository) SendFollowUpEmails(ctx context.Context, invoices []mod
 		subject := fmt.Sprintf("Follow-up: Outstanding Invoice #%s from Evershift", requestID)
 		htmlBody := r.generateFollowUpEmailHTML(&invoice, clientName, requestID, paymentURL)
 
-		message := r.mg.NewMessage(r.from, subject, "", clientEmail)
+		message := mailgun.NewMessage(r.from, subject, "", clientEmail)
 		message.SetHTML(htmlBody)
 		message.SetReplyTo("Evershift Support <support@evershift.co>")
 
