@@ -49,7 +49,24 @@ echo "Starting application..."
 # Check if we're in production environment (Render sets PORT automatically)
 if [ -n "$PORT" ]; then
   echo "Production environment detected, running compiled binary..."
-  exec ./main
+  
+  # Check if main binary exists in current directory
+  if [ -f "./main" ]; then
+    exec ./main
+  elif [ -f "/app/main" ]; then
+    exec /app/main
+  else
+    echo "Error: main binary not found. Available files:"
+    ls -la
+    echo "Attempting to build binary..."
+    go build -o main ./cmd/api
+    if [ -f "./main" ]; then
+      exec ./main
+    else
+      echo "Failed to build binary. Exiting."
+      exit 1
+    fi
+  fi
 else
   echo "Development environment detected, running with air..."
   exec "$@"
