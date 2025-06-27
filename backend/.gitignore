@@ -1,0 +1,56 @@
+.env
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Go build artifacts
+/bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+*.prof
+*.cov
+
+# Go workspace file
+go.work
+
+# Dependency directories
+/vendor/
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+/logs/
+*.log
+
+# Temporary files
+/tmp/
+/temp/
+
+# Local development files
+/localdev/
+
+# lambda build artifacts
+lambda/**/*.zip
+lambda/**/main
+AWS/*.zip
+
+# sam build artifacts
+/**/*.zip
+/**/main

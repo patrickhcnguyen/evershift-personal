@@ -1,0 +1,18 @@
+# version: "3.8"
+
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    volumes:
+      - .:/app
+      - /app/tmp  
+    environment:
+      - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@evershift-dev-db.c7qysuy0ecf8.us-east-2.rds.amazonaws.com:${DB_PORT:-5432}/${DB_NAME:-evershift}?sslmode=require
+    env_file:
+      - .env
+    restart: always
+
+# volumes:
+#   pgdata:
