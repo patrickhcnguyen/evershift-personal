@@ -45,4 +45,12 @@ goose -dir ./internal/adapter/store/postgres/migrations postgres \
   "$DATABASE_URL" up
 
 echo "Starting application..."
-exec "$@"
+
+# Check if we're in production environment (Render sets PORT automatically)
+if [ -n "$PORT" ]; then
+  echo "Production environment detected, running compiled binary..."
+  exec ./main
+else
+  echo "Development environment detected, running with air..."
+  exec "$@"
+fi
