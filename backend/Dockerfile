@@ -12,7 +12,8 @@ RUN go mod download
 
 COPY . .
 
-# RUN go build -o main ./cmd/api
+# Build the binary for production
+RUN go build -o main ./cmd/api
 
 EXPOSE 3001
 
@@ -20,4 +21,5 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
 
-CMD ["air", "-c", ".air.toml"]
+# Change CMD to run the binary instead of air
+CMD ["./main"]
