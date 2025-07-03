@@ -125,7 +125,7 @@ func main() {
 	}
 
 	log.Printf("Starting server on port %s", port)
-	if err := router.Serve(":" + port); err != nil {
+	if err := router.Serve("0.0.0.0:" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

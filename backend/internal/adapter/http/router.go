@@ -46,6 +46,14 @@ func NewRouter(
 
 	router.Use(middleware.CORS())
 
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok", "message": "Evershift API is running"})
+	})
+
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "healthy"})
+	})
+
 	apiGroup := router.Group("api")
 	{
 		// authGroup := apiGroup.Group("/auth")
