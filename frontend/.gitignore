@@ -2,3 +2,6 @@ bun.lockb
 node_modules
 package-lock.json
 .env
+.env.dev
+.env.staging
+.DS_Store

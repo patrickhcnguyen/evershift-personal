@@ -29,8 +29,13 @@ func NewStripeRepository(db *gorm.DB) ports.StripeRepository {
 }
 
 func (r *StripeRepository) CreatePaymentIntent(ctx context.Context, invoice *models.Invoice) (string, error) {
+	paymentAmount := invoice.Balance
+	if paymentAmount <= 0 {
+		paymentAmount = invoice.Amount
+	}
+
 	params := &stripe.PaymentIntentParams{
-		Amount:   stripe.Int64(int64(invoice.Amount * 100)),
+		Amount:   stripe.Int64(int64(paymentAmount * 100)),
 		Currency: stripe.String(string(stripe.CurrencyUSD)),
 		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
 			Enabled: stripe.Bool(true),
@@ -45,8 +50,6 @@ func (r *StripeRepository) CreatePaymentIntent(ctx context.Context, invoice *mod
 		return "", err
 	}
 
-	// update the invoice in the database with the payment intent ID
-	// TODO: not working right now
 	err = r.db.WithContext(ctx).Model(invoice).Update("payment_intent", paymentIntent.ID).Error
 	if err != nil {
 		return "", err
@@ -58,58 +61,93 @@ func (r *StripeRepository) CreatePaymentIntent(ctx context.Context, invoice *mod
 func (r *StripeRepository) CreateCheckoutSession(ctx context.Context, invoice *models.Invoice, staffRequirements []models.StaffRequirement) (string, error) {
 	var lineItems []*stripe.CheckoutSessionLineItemParams
 
-	// Single line item for all staff services using invoice subtotal
-	// TODO: fix staff requirement rate calculation and use that later
-	if invoice.Subtotal > 0 {
-		staffServicesItem := &stripe.CheckoutSessionLineItemParams{
-			PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-				Currency: stripe.String(string(stripe.CurrencyUSD)),
-				ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-					Name:        stripe.String("Event Staff Services"),
-					Description: stripe.String("Staff services for your event"),
-				},
-				UnitAmount: stripe.Int64(int64(invoice.Subtotal * 100)),
-			},
-			Quantity: stripe.Int64(1),
-		}
-		lineItems = append(lineItems, staffServicesItem)
+	checkoutAmount := invoice.Balance
+	if checkoutAmount <= 0 {
+		checkoutAmount = invoice.Amount
 	}
 
-	// Add service fee
-	if invoice.ServiceFee > 0 {
-		serviceFeeItem := &stripe.CheckoutSessionLineItemParams{
+	if invoice.Balance > 0 && invoice.AmountPaid > 0 {
+		balanceItem := &stripe.CheckoutSessionLineItemParams{
 			PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
 				Currency: stripe.String(string(stripe.CurrencyUSD)),
 				ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-					Name:        stripe.String("Service Fee"),
-					Description: stripe.String("Administrative service fee"),
+					Name:        stripe.String("Remaining Balance"),
+					Description: stripe.String(fmt.Sprintf("Additional charges for Invoice #%s", invoice.RequestID.String())),
 				},
-				UnitAmount: stripe.Int64(int64(invoice.ServiceFee * 100)),
+				UnitAmount: stripe.Int64(int64(checkoutAmount * 100)),
 			},
 			Quantity: stripe.Int64(1),
 		}
-		lineItems = append(lineItems, serviceFeeItem)
+		lineItems = append(lineItems, balanceItem)
+	} else {
+
+		if invoice.Subtotal > 0 {
+			staffServicesItem := &stripe.CheckoutSessionLineItemParams{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					Currency: stripe.String(string(stripe.CurrencyUSD)),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name:        stripe.String("Event Staff Services"),
+						Description: stripe.String("Staff services for your event"),
+					},
+					UnitAmount: stripe.Int64(int64(invoice.Subtotal * 100)),
+				},
+				Quantity: stripe.Int64(1),
+			}
+			lineItems = append(lineItems, staffServicesItem)
+		}
+
+		if invoice.ServiceFee > 0 {
+			serviceFeeItem := &stripe.CheckoutSessionLineItemParams{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					Currency: stripe.String(string(stripe.CurrencyUSD)),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name:        stripe.String("Service Fee"),
+						Description: stripe.String("Administrative service fee"),
+					},
+					UnitAmount: stripe.Int64(int64(invoice.ServiceFee * 100)),
+				},
+				Quantity: stripe.Int64(1),
+			}
+			lineItems = append(lineItems, serviceFeeItem)
+		}
+
+		if invoice.TransactionFee > 0 {
+			transactionFeeItem := &stripe.CheckoutSessionLineItemParams{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					Currency: stripe.String(string(stripe.CurrencyUSD)),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name:        stripe.String("Transaction Fee"),
+						Description: stripe.String("Payment processing fee (3.5%)"),
+					},
+					UnitAmount: stripe.Int64(int64(invoice.TransactionFee * 100)),
+				},
+				Quantity: stripe.Int64(1),
+			}
+			lineItems = append(lineItems, transactionFeeItem)
+		}
+
+		if len(lineItems) == 0 && checkoutAmount > 0 {
+			fallbackItem := &stripe.CheckoutSessionLineItemParams{
+				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
+					Currency: stripe.String(string(stripe.CurrencyUSD)),
+					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
+						Name:        stripe.String("Invoice Payment"),
+						Description: stripe.String(fmt.Sprintf("Payment for Invoice #%s", invoice.RequestID.String())),
+					},
+					UnitAmount: stripe.Int64(int64(checkoutAmount * 100)),
+				},
+				Quantity: stripe.Int64(1),
+			}
+			lineItems = append(lineItems, fallbackItem)
+		}
 	}
 
-	// Add transaction fee
-	if invoice.TransactionFee > 0 {
-		transactionFeeItem := &stripe.CheckoutSessionLineItemParams{
-			PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-				Currency: stripe.String(string(stripe.CurrencyUSD)),
-				ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-					Name:        stripe.String("Transaction Fee"),
-					Description: stripe.String("Payment processing fee (3.5%)"),
-				},
-				UnitAmount: stripe.Int64(int64(invoice.TransactionFee * 100)),
-			},
-			Quantity: stripe.Int64(1),
-		}
-		lineItems = append(lineItems, transactionFeeItem)
+	if len(lineItems) == 0 {
+		return "", fmt.Errorf("no line items available for checkout session - invoice amount: %.2f, balance: %.2f", invoice.Amount, invoice.Balance)
 	}
 
 	params := &stripe.CheckoutSessionParams{
-		SuccessURL: stripe.String("https://evershift-personal.vercel.app/"),
-		// CancelURL:  stripe.String("http://localhost:8080/cancel"),
+		SuccessURL:    stripe.String("http://localhost:8080/"),
 		Mode:          stripe.String(string(stripe.CheckoutSessionModePayment)),
 		LineItems:     lineItems,
 		CustomerEmail: stripe.String(invoice.Request.Email),
@@ -123,12 +161,6 @@ func (r *StripeRepository) CreateCheckoutSession(ctx context.Context, invoice *m
 	if err != nil {
 		return "", err
 	}
-
-	// Optionally update invoice with checkout session ID
-	// err = r.db.WithContext(ctx).Model(invoice).Update("checkout_session_id", session.ID).Error
-	// if err != nil {
-	// 	return "", err
-	// }
 
 	return session.URL, nil
 }
@@ -158,35 +190,44 @@ func (r *StripeRepository) Webhook(ctx context.Context, payload []byte, signatur
 		return fmt.Errorf("error verifying webhook signature: %w", err)
 	}
 
-	// Handle the event
 	switch event.Type {
 	case stripe.EventTypeCheckoutSessionCompleted:
 		var checkoutSession stripe.CheckoutSession
+		var invoice models.Invoice
 		if err := json.Unmarshal(event.Data.Raw, &checkoutSession); err != nil {
 			return fmt.Errorf("error parsing webhook JSON: %w", err)
 		}
 
-		// Retrieve invoice_id from metadata
 		invoiceID, ok := checkoutSession.Metadata["invoice_id"]
 		if !ok {
 			log.Printf("invoice_id not found in webhook metadata for session %s", checkoutSession.ID)
-			return nil // Or return an error if it's unexpected
+			return nil
 		}
 
-		// Check if the payment was successful
 		if checkoutSession.PaymentStatus == stripe.CheckoutSessionPaymentStatusPaid {
+			if err := r.db.WithContext(ctx).Where("uuid = ?", invoiceID).First(&invoice).Error; err != nil {
+				return fmt.Errorf("failed to get invoice: %w", err)
+			}
+
+			amountPaid := float64(checkoutSession.AmountTotal) / 100
+			totalAmountPaid := invoice.AmountPaid + amountPaid
+			newBalance := invoice.Amount - totalAmountPaid
+
+			status := "paid"
+			if newBalance > 0.01 {
+				status = "partially_paid"
+			}
+
 			err := r.db.WithContext(ctx).Model(&models.Invoice{}).Where("uuid = ?", invoiceID).Updates(map[string]interface{}{
-				"status":         "paid",
+				"status":         status,
 				"payment_intent": checkoutSession.PaymentIntent.ID,
+				"amount_paid":    totalAmountPaid,
+				"balance":        newBalance,
 			}).Error
 
 			if err != nil {
 				return fmt.Errorf("failed to update invoice for %s: %w", invoiceID, err)
 			}
-			log.Printf("Invoice %s marked as paid.", invoiceID)
-
-			// TODO: send admin confirmation email
-			// r.SendAdminConfirmationEmail(...)
 		}
 
 	case stripe.EventTypeChargeRefunded:
@@ -195,7 +236,6 @@ func (r *StripeRepository) Webhook(ctx context.Context, payload []byte, signatur
 			return fmt.Errorf("error parsing webhook JSON for charge.refunded: %w", err)
 		}
 
-		// Find the invoice using the PaymentIntent ID from the charge
 		var invoice models.Invoice
 		if err := r.db.WithContext(ctx).Where("payment_intent = ?", charge.PaymentIntent.ID).First(&invoice).Error; err != nil {
 			log.Printf("Could not find invoice for payment intent %s to mark as refunded.", charge.PaymentIntent.ID)

@@ -43,19 +43,20 @@ func (h *RequestHandler) CreateRequest(c *gin.Context) {
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
 	var requestData struct {
-		FirstName         string `json:"first_name"`
-		LastName          string `json:"last_name"`
-		Email             string `json:"email"`
-		PhoneNumber       string `json:"phone_number"`
-		TypeOfEvent       string `json:"type_of_event"`
-		EventLocation     string `json:"event_location"`
-		StartDate         string `json:"start_date"`
-		EndDate           string `json:"end_date"`
-		IsCompany         bool   `json:"is_company"`
-		CompanyName       string `json:"company_name"`
-		PoEditCounter     int    `json:"po_edit_counter"`
-		PoNumber          string `json:"po_number"`
-		StaffRequirements []struct {
+		FirstName              string `json:"first_name"`
+		LastName               string `json:"last_name"`
+		Email                  string `json:"email"`
+		PhoneNumber            string `json:"phone_number"`
+		TypeOfEvent            string `json:"type_of_event"`
+		EventLocation          string `json:"event_location"`
+		StartDate              string `json:"start_date"`
+		EndDate                string `json:"end_date"`
+		IsCompany              bool   `json:"is_company"`
+		CompanyName            string `json:"company_name"`
+		PoEditCounter          int    `json:"po_edit_counter"`
+		PoNumber               string `json:"po_number"`
+		CustomRequirementsText string `json:"custom_requirements_text"`
+		StaffRequirements      []struct {
 			UUID      string  `json:"uuid"`
 			Date      string  `json:"date"`
 			Position  string  `json:"position"`
@@ -76,16 +77,17 @@ func (h *RequestHandler) CreateRequest(c *gin.Context) {
 	endDate, _ := time.Parse("2006-01-02", requestData.EndDate)
 
 	request := models.Request{
-		FirstName:     requestData.FirstName,
-		LastName:      requestData.LastName,
-		Email:         requestData.Email,
-		PhoneNumber:   requestData.PhoneNumber,
-		TypeOfEvent:   requestData.TypeOfEvent,
-		EventLocation: requestData.EventLocation,
-		StartDate:     startDate,
-		EndDate:       endDate,
-		IsCompany:     requestData.IsCompany,
-		CompanyName:   requestData.CompanyName,
+		FirstName:              requestData.FirstName,
+		LastName:               requestData.LastName,
+		Email:                  requestData.Email,
+		PhoneNumber:            requestData.PhoneNumber,
+		TypeOfEvent:            requestData.TypeOfEvent,
+		EventLocation:          requestData.EventLocation,
+		StartDate:              startDate,
+		EndDate:                endDate,
+		IsCompany:              requestData.IsCompany,
+		CompanyName:            requestData.CompanyName,
+		CustomRequirementsText: requestData.CustomRequirementsText,
 	}
 
 	var staffRequirements []models.StaffRequirement

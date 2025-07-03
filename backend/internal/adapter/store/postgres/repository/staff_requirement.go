@@ -2,8 +2,7 @@ package repository
 
 import (
 	"context"
-	"fmt"
-	"log"
+	// "log"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -25,15 +24,15 @@ func (r *StaffRequirementRepository) CreateStaffRequirement(ctx context.Context,
 		staffRequirement.UUID = uuid.New()
 	}
 
-	log.Printf("Creating staff requirement: %+v", staffRequirement)
+	// log.Printf("Creating staff requirement: %+v", staffRequirement)
 
 	err := r.db.WithContext(ctx).Create(staffRequirement).Error
 	if err != nil {
-		log.Printf("Error creating staff requirement: %v", err)
+		// log.Printf("Error creating staff requirement: %v", err)
 		return err
 	}
 
-	log.Printf("Successfully created staff requirement with UUID: %s", staffRequirement.UUID)
+	// log.Printf("Successfully created staff requirement with UUID: %s", staffRequirement.UUID)
 	return nil
 }
 
@@ -60,21 +59,12 @@ func (r *StaffRequirementRepository) DeleteStaffRequirement(ctx context.Context,
 func (r *StaffRequirementRepository) GetRate(ctx context.Context, staffType string, location string) (float64, error) {
 	var rate models.Rate
 	err := r.db.WithContext(ctx).
-		Where("staff_type = ? AND branch_id = ?", staffType, location).
+		Where("staff_type = ? AND branch_id = (SELECT closest_branch_id FROM requests WHERE event_location = ? LIMIT 1)",
+			staffType, location).
 		First(&rate).Error
-
 	if err != nil {
-		// If no specific rate found for this branch/staff type, try to find a default rate
-		// from any branch for this staff type as fallback
-		err = r.db.WithContext(ctx).
-			Where("staff_type = ?", staffType).
-			First(&rate).Error
-
-		if err != nil {
-			return 0, fmt.Errorf("no rate found for staff type %s in branch %s", staffType, location)
-		}
+		return 0, err
 	}
-
 	return rate.HourlyRate, nil
 }
 

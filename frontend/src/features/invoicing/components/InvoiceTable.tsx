@@ -2,7 +2,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useEffect, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
-import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,10 @@ export function InvoiceTable() {
   const [branches] = useState<string[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: 'asc' });
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  
   const navigate = useNavigate();
   const { isSuperAdmin } = useAuth();
 
@@ -34,6 +38,7 @@ export function InvoiceTable() {
       key,
       direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
     }));
+    setCurrentPage(1);
   };
 
   const getSortedRequests = () => {
@@ -46,7 +51,7 @@ export function InvoiceTable() {
       let aValue = a[sortConfig.key!];
       let bValue = b[sortConfig.key!];
 
-      if (sortConfig.key === 'due_date') {
+      if (sortConfig.key === 'due_date' || sortConfig.key === 'date_requested') {
         aValue = new Date(String(aValue)).getTime();
         bValue = new Date(String(bValue)).getTime();
       } else if (sortConfig.key === 'amount' || sortConfig.key === 'balance') {
@@ -66,6 +71,27 @@ export function InvoiceTable() {
     });
   };
 
+  // Pagination logic
+  const getPaginatedRequests = () => {
+    const sortedRequests = getSortedRequests();
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return sortedRequests.slice(startIndex, endIndex);
+  };
+
+  const totalPages = Math.ceil(requests.length / itemsPerPage);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1); // Reset to first page when changing items per page
+  };
+
   const getSortIcon = (key: keyof Request) => {
     if (sortConfig.key !== key) return <ArrowUpDown className="ml-2 h-4 w-4" />;
     return sortConfig.direction === 'asc' 
@@ -83,9 +109,9 @@ export function InvoiceTable() {
       setAdminBranch(branchToFetch); 
       try {
         const [requestData, invoiceData] = await Promise.all([
-          fetch(`https://evershift-personal.onrender.com/api/requests/branch/${branchToFetch}`),
+          fetch(`http://localhost:3001/api/requests/branch/${branchToFetch}`),
           // fetch invoices to get amount, balance, and status
-          fetch(`https://evershift-personal.onrender.com/api/invoices/branch/${branchToFetch}`)
+          fetch(`http://localhost:3001/api/invoices/branch/${branchToFetch}`)
         ]);
         
         if (!requestData.ok) {
@@ -115,10 +141,10 @@ export function InvoiceTable() {
             email: item.Email,
             phone_number: item.PhoneNumber,
             due_date: item.StartDate, 
+            date_requested: item.DateRequested,
             branch_name: item.ClosestBranchName,
             branch_id: item.ClosestBranchID,
-
-            // Default values for fields that might be updated from invoices
+            type_of_event: item.TypeOfEvent,
             amount: 0,
             balance: 0,
             status: "pending"
@@ -133,7 +159,7 @@ export function InvoiceTable() {
                 invoicesByRequestId[requestId] = [];
               }
               invoicesByRequestId[requestId].push({
-                id: invoice.id,
+                uuid: invoice.uuid,
                 request_id: invoice.request_id,
                 due_date: invoice.due_date,
                 amount: invoice.amount,
@@ -141,8 +167,8 @@ export function InvoiceTable() {
                 status: invoice.status,
                 po_number: invoice.po_number,
                 client_name: invoice.client_name,
-                branch_name: invoice.branch_name
-              });
+                branch: invoice.branch_name
+              } as Invoice);
             });
             
             transformedRequests.forEach(request => {
@@ -271,10 +297,20 @@ export function InvoiceTable() {
               <TableHead className="text-center">
                 <Button
                   variant="ghost"
+                  onClick={() => handleSort('date_requested')}
+                  className="h-8 flex items-center justify-center gap-1 w-full"
+                >
+                  Date Requested
+                  {getSortIcon('date_requested')}
+                </Button>
+              </TableHead>
+              <TableHead className="text-center">
+                <Button
+                  variant="ghost"
                   onClick={() => handleSort('due_date')}
                   className="h-8 flex items-center justify-center gap-1 w-full"
                 >
-                  Date
+                  Event Date
                   {getSortIcon('due_date')}
                 </Button>
               </TableHead>
@@ -313,12 +349,12 @@ export function InvoiceTable() {
           <TableBody>
             {requests.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
                   No requests found {adminBranch && !isSuperAdmin ? `for ${adminBranch}` : isSuperAdmin && selectedBranch ? `for ${selectedBranch}` : ''}
                 </TableCell>
               </TableRow>
             ) : (
-              getSortedRequests().map((request) => (
+              getPaginatedRequests().map((request) => (
                 <TableRow 
                   key={request.id} 
                   className="cursor-pointer hover:bg-muted/50"
@@ -332,6 +368,9 @@ export function InvoiceTable() {
                         Branch: {request.branch_name}
                       </div>
                     )}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {request.date_requested ? new Date(request.date_requested).toLocaleDateString() : 'N/A'}
                   </TableCell>
                   <TableCell className="text-center">{new Date(request.due_date).toLocaleDateString()}</TableCell>
                   <TableCell className="text-center">{formatCurrency(request.amount)}</TableCell>
@@ -349,6 +388,81 @@ export function InvoiceTable() {
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">
+            Showing {Math.min((currentPage - 1) * itemsPerPage + 1, requests.length)} to{' '}
+            {Math.min(currentPage * itemsPerPage, requests.length)} of {requests.length} entries
+          </span>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Rows per page:</span>
+            <Select value={itemsPerPage.toString()} onValueChange={handleItemsPerPageChange}>
+              <SelectTrigger className="w-[70px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="5">5</SelectItem>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="20">20</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNumber;
+                if (totalPages <= 5) {
+                  pageNumber = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNumber = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNumber = totalPages - 4 + i;
+                } else {
+                  pageNumber = currentPage - 2 + i;
+                }
+                
+                return (
+                  <Button
+                    key={pageNumber}
+                    variant={pageNumber === currentPage ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNumber)}
+                    className="w-8 h-8"
+                  >
+                    {pageNumber}
+                  </Button>
+                );
+              })}
+            </div>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );

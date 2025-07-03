@@ -1,6 +1,11 @@
 # version: "3.8"
 
 services:
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+      
   app:
     build: .
     ports:
@@ -9,10 +14,13 @@ services:
       - .:/app
       - /app/tmp  
     environment:
+      - REDIS_URL=redis:6379
+      - REDIS_PASSWORD=
       - DATABASE_URL=postgres://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@evershift-dev-db.c7qysuy0ecf8.us-east-2.rds.amazonaws.com:${DB_PORT:-5432}/${DB_NAME:-evershift}?sslmode=require
     env_file:
       - .env
-    restart: always
+    depends_on:
+      - redis
 
 # volumes:
 #   pgdata:

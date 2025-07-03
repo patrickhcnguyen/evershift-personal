@@ -15,6 +15,8 @@ export interface Request {
   amount: number;
   balance: number;
   status: string; 
+  date_requested: string;
+  CustomRequirementsText?: string;
   invoice: Invoice;
   custom_line_items: CustomLineItem[];
   staff_requirements: StaffRequirement[];
@@ -96,3 +98,39 @@ export const PAYMENT_TERMS = [
   "Net 10",
   "Due on receipt"
 ]
+
+export interface EmailHeaders {
+  subject?: string;
+  cc?: string[];
+  bcc?: string[];
+  replyTo?: string;
+}
+
+export interface SendEmailResponse {
+  message: string;
+}
+
+export interface ScheduleEmailResponse {
+  message: string;
+  send_at: string;
+  invoice_id: string;
+  email_type?: string;
+}
+
+export interface EmailError {
+  error: string;
+}
+
+export interface CachedEmailData {
+  content: string;
+  headers: EmailHeaders;
+  timestamp: number;
+  requestId: string;
+}
+
+export interface CachedScheduledEmailData extends CachedEmailData {
+  scheduleType: 'days' | 'specific';
+  daysFromNow?: number;
+  specificDate?: string;
+  specificTime?: string;
+} 

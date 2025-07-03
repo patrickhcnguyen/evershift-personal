@@ -1,17 +1,15 @@
 package ports
 
-import (
-	"context"
-	// "backend/internal/core/models"
-)
+import "context"
 
 type CronRepository interface {
-	RunFollowUpEmails(ctx context.Context) error
-	CheckOverdueInvoices(ctx context.Context) error
+	Run() error
+	Stop() error
+	ProcessScheduledEmails(ctx context.Context) error
 }
 
 type CronService interface {
-	Start() error
-	Stop()
-	TriggerFollowUpsByDelay(ctx context.Context, delayDays int) (int, error)
+	Run() error
+	Stop() error
+	ProcessScheduledEmails(ctx context.Context) error
 }

@@ -167,3 +167,30 @@ func (h *InvoiceHandler) CheckForOverdueInvoices(c *gin.Context) {
 		"overdue_invoices": overdueInvoices,
 	})
 }
+
+// RecalculateInvoiceWithNewItems adds new line items to a paid invoice and recalculates totals
+func (h *InvoiceHandler) RecalculateInvoiceWithNewItems(c *gin.Context) {
+	id := c.Param("id")
+	invoiceUUID, err := uuid.Parse(id)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid invoice UUID format"})
+		return
+	}
+
+	var newCustomLineItems []models.CustomLineItems
+	if err := c.ShouldBindJSON(&newCustomLineItems); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid custom line items format: " + err.Error()})
+		return
+	}
+
+	updatedInvoice, err := h.invoiceService.RecalculateInvoiceAfterPaymentWithNewItems(c.Request.Context(), invoiceUUID, newCustomLineItems)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Invoice recalculated successfully",
+		"invoice": updatedInvoice,
+	})
+}

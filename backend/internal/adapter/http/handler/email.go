@@ -108,6 +108,9 @@ func (h *EmailHandler) SendCustomEmail(c *gin.Context) {
 		}
 	}
 
+	// Get payment URL from form data (optional)
+	paymentUrl := c.PostForm("paymentUrl")
+
 	// Handle PDF attachment (optional)
 	var pdfData []byte
 	var filename string
@@ -155,7 +158,7 @@ func (h *EmailHandler) SendCustomEmail(c *gin.Context) {
 		return
 	}
 
-	err = h.svc.SendCustomEmail(c.Request.Context(), invoice, staffRequirements, emailContent, emailHeaders, pdfData, filename)
+	err = h.svc.SendCustomEmail(c.Request.Context(), invoice, staffRequirements, emailContent, emailHeaders, pdfData, filename, paymentUrl)
 	if err != nil {
 		log.Printf("Failed to send custom email: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send custom email"})
@@ -174,83 +177,86 @@ func (h *EmailHandler) SendCustomEmail(c *gin.Context) {
 	if hasAttachment {
 		message += " with PDF attachment"
 	}
+	if paymentUrl != "" {
+		message += " with payment button"
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": message})
 }
 
-func (h *EmailHandler) SendFollowUpEmails(c *gin.Context) {
-	branchId := c.Param("branch_id")
-	branchUuid, err := uuid.Parse(branchId)
+func (h *EmailHandler) ScheduleEmail(c *gin.Context) {
+	requestId := c.Param("request_id")
+
+	parsedID, err := uuid.Parse(requestId)
+
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid branch UUID format"})
+		log.Printf("DEBUG HANDLER: Failed to parse request_id: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request ID"})
 		return
 	}
 
-	// Get all invoices for the branch
-	invoiceResponses, err := h.invoiceSvc.GetInvoiceByBranchID(c.Request.Context(), branchUuid)
+	invoice, err := h.invoiceSvc.GetInvoiceByRequestID(c.Request.Context(), parsedID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get invoices for branch"})
+		log.Printf("Failed to get invoice: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get invoice"})
 		return
 	}
 
-	var overdueInvoicesForBranch []models.Invoice
-	for _, invoiceResp := range invoiceResponses {
-		// Check if invoice is overdue and unpaid/pending
-		if (invoiceResp.Status == "unpaid" || invoiceResp.Status == "pending") &&
-			invoiceResp.DueDate.UTC().Before(time.Now().UTC()) {
-
-			// Get full invoice details
-			fullInvoice, err := h.invoiceSvc.GetInvoiceByID(c.Request.Context(), invoiceResp.UUID)
-			if err != nil {
-				log.Printf("Warning: Could not get full invoice %s: %v", invoiceResp.UUID, err)
-				continue
-			}
-			overdueInvoicesForBranch = append(overdueInvoicesForBranch, *fullInvoice)
-		}
+	var scheduleRequest struct {
+		SendAt       string              `json:"send_at" binding:"required"`
+		EmailContent string              `json:"email_content,omitempty"`
+		EmailSubject string              `json:"email_subject,omitempty"`
+		EmailHeaders models.EmailHeaders `json:"email_headers,omitempty"`
+		PaymentURL   string              `json:"payment_url,omitempty"`
 	}
 
-	if len(overdueInvoicesForBranch) == 0 {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "No overdue invoices found for this branch",
-			"count":   0,
-		})
+	if err := c.ShouldBindJSON(&scheduleRequest); err != nil {
+		log.Printf("DEBUG HANDLER: Failed to bind JSON: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	paymentURLs := make(map[string]string)
-	for _, invoice := range overdueInvoicesForBranch {
-		staffRequirements, _ := h.staffRequirementSvc.GetAllStaffRequirementsByRequestID(c.Request.Context(), invoice.RequestID)
-
-		paymentURL, err := h.stripeService.CreateCheckoutSession(c.Request.Context(), &invoice, staffRequirements)
-		if err != nil {
-			log.Printf("Warning: Could not create payment URL for invoice %s: %v", invoice.UUID, err)
-			paymentURLs[invoice.UUID.String()] = ""
-		} else {
-			paymentURLs[invoice.UUID.String()] = paymentURL
-		}
-	}
-
-	err = h.svc.SendFollowUpEmails(c.Request.Context(), overdueInvoicesForBranch, paymentURLs)
+	sendAt, err := time.Parse(time.RFC3339, scheduleRequest.SendAt)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send follow-up emails"})
+		log.Printf("DEBUG HANDLER: Failed to parse send_at: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid send_at format"})
 		return
 	}
 
-	successCount := 0
-	for _, invoice := range overdueInvoicesForBranch {
-		now := time.Now().UTC()
-		invoice.LastSent = now
-		invoice.FollowUpCount += 1
+	if sendAt.Before(time.Now().UTC()) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Send_at cannot be in the past"})
+		return
+	}
 
-		err = h.invoiceSvc.UpdateInvoice(c.Request.Context(), &invoice)
-		if err == nil {
-			successCount++
-		}
+	staffRequirements, err := h.staffRequirementSvc.GetAllStaffRequirementsByRequestID(c.Request.Context(), parsedID)
+	if err != nil {
+		log.Printf("Failed to get staff requirements: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get staff requirements"})
+		return
+	}
+
+	err = h.svc.ScheduleEmail(c.Request.Context(), invoice, staffRequirements, sendAt, scheduleRequest.EmailContent, scheduleRequest.EmailHeaders, scheduleRequest.PaymentURL)
+
+	if err != nil {
+		log.Printf("Failed to schedule email: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to schedule email"})
+		return
+	}
+
+	emailType := "default template"
+	if scheduleRequest.EmailContent != "" {
+		emailType = "custom content"
+	}
+
+	message := "Email scheduled successfully"
+	if scheduleRequest.PaymentURL != "" {
+		message += " with payment button"
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":         "Follow-up emails sent successfully",
-		"emails_sent":     successCount,
-		"total_processed": len(overdueInvoicesForBranch),
+		"message":    message,
+		"send_at":    sendAt.Format(time.RFC3339),
+		"invoice_id": invoice.UUID,
+		"email_type": emailType,
 	})
 }

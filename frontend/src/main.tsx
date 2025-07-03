@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import App from './App.tsx';
 import Index from './pages/Index.tsx';
-import Schedule from './pages/Schedule.tsx';
+import Schedule from './features/scheduling/schedule.tsx';
 import Dashboard from './pages/Dashboard.tsx';
 import Employees from './pages/Employees.tsx';
 import Communication from './pages/Communication.tsx';

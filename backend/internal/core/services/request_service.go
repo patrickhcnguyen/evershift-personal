@@ -63,7 +63,12 @@ func (s *RequestService) CreateRequest(ctx context.Context, request *models.Requ
 		return err
 	}
 
-	if err := s.invoiceService.CreateInvoice(ctx, &models.Invoice{}, request); err != nil {
+	// Create an invoice for the request (without custom requirements in notes)
+	invoice := &models.Invoice{
+		Notes: "", // Don't put custom requirements in notes
+	}
+
+	if err := s.invoiceService.CreateInvoice(ctx, invoice, request); err != nil {
 		return fmt.Errorf("failed to create invoice: %w", err)
 	}
 

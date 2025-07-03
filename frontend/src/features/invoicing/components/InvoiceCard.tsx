@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Request, Invoice, StaffRequirement as DisplayStaffRequirement } from "@/features/invoicing/types";
 import { formatCurrency } from "@/lib/utils";
-import { ArrowLeft, Mail, Printer, Save, Edit, X } from "lucide-react";
+import { ArrowLeft, Mail, Printer, Save, Edit, X, Clock } from "lucide-react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,6 +17,7 @@ import { useCookie } from "@/hooks/useCookie";
 import { PAYMENT_TERMS, STAFF_TYPES, CustomLineItem, StaffRequirement as EditorStaffRequirement } from "../types";
 
 import { EmailModal } from "./EmailModal";
+import { ScheduleEmailModal } from "./ScheduleEmailModal";
 
 import { sendInvoiceEmail } from '../services/sendEmail';
 import { refundInvoice } from '../services/refund';
@@ -45,6 +46,53 @@ const formatTimeToHHMM = (utcTimeString: string, timezone = 'America/Los_Angeles
   }).format(date);
 };
 
+// Format time based on selected format preference
+const formatTimeByPreference = (utcTimeString: string, format: '12hr' | '24hr', timezone = 'America/Los_Angeles') => {
+  if (!utcTimeString) return 'N/A';
+  
+  const date = new Date(utcTimeString);
+  
+  if (format === '24hr') {
+    return new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: timezone,
+      hour12: false
+    }).format(date);
+  } else {
+    return new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: timezone,
+      timeZoneName: 'short'
+    }).format(date);
+  }
+};
+
+// Convert 12hr time string to 24hr format
+const convertTo24Hour = (timeString: string) => {
+  if (!timeString || timeString === 'N/A') return 'N/A';
+  
+  // Remove timezone info if present (e.g., "2:00 PM PST" -> "2:00 PM")
+  const timeOnly = timeString.replace(/\s[A-Z]{3,4}$/, '');
+  
+  try {
+    // Create a date object from the time string
+    const today = new Date().toDateString();
+    const fullDateTime = new Date(`${today} ${timeOnly}`);
+    
+    if (isNaN(fullDateTime.getTime())) return timeString; // Return original if parsing fails
+    
+    return fullDateTime.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+  } catch {
+    return timeString; // Return original if conversion fails
+  }
+};
+
 export function InvoiceCard() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,6 +110,10 @@ export function InvoiceCard() {
   const [editMode, setEditMode] = useState(false);
   
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [isScheduleEmailModalOpen, setIsScheduleEmailModalOpen] = useState(false);
+  const [scheduleEmailMessage, setScheduleEmailMessage] = useState<string>('');
+  const [showLogo, setShowLogo] = useState(true);
+  const [timeFormat, setTimeFormat] = useState<'12hr' | '24hr'>('12hr');
   
   const handlePrint = useInvoicePrint({ componentRef, invoice });
   
@@ -83,14 +135,14 @@ export function InvoiceCard() {
         customLineItemsData,
         requestData,
       ] = await Promise.all([
-        fetch(`https://evershift-personal.onrender.com/api/invoices/request/${requestId}`),
+        fetch(`http://localhost:3001/api/invoices/request/${requestId}`),
         fetch(
-          `https://evershift-personal.onrender.com/api/staff-requirements/request/${requestId}`
+          `http://localhost:3001/api/staff-requirements/request/${requestId}`
         ),
         fetch(
-          `https://evershift-personal.onrender.com/api/custom-line-items/request/${requestId}`
+          `http://localhost:3001/api/custom-line-items/request/${requestId}`
         ),
-        fetch(`https://evershift-personal.onrender.com/api/requests/${requestId}`),
+        fetch(`http://localhost:3001/api/requests/${requestId}`),
       ]);
 
       if (
@@ -251,7 +303,7 @@ export function InvoiceCard() {
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to Invoices
         </Button>
-        <h1 className="text-2xl font-bold">Invoice Details</h1>
+        {/* <h1 className="text-xl font-bold text-center">Invoice Details</h1> */}
         
         <div className="ml-auto flex gap-2">
           {editMode ? (
@@ -291,6 +343,20 @@ export function InvoiceCard() {
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
               </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setShowLogo(!showLogo)}
+              >
+                {showLogo ? 'Hide Logo' : 'Show Logo'}
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => setTimeFormat(timeFormat === '12hr' ? '24hr' : '12hr')}
+              >
+                {timeFormat === '12hr' ? '24hr Time' : '12hr Time'}
+              </Button>
               <Button variant="outline" size="sm" 
               onClick={handlePrint}
               >
@@ -314,7 +380,7 @@ export function InvoiceCard() {
                     Custom Email
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-2xl">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Send Custom Email</DialogTitle>
                   </DialogHeader>
@@ -328,76 +394,126 @@ export function InvoiceCard() {
                   )}
                 </DialogContent>
               </Dialog>
+              
+              <Dialog open={isScheduleEmailModalOpen} onOpenChange={setIsScheduleEmailModalOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Clock className="mr-2 h-4 w-4" />
+                    Schedule Email
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Schedule Email</DialogTitle>
+                  </DialogHeader>
+                  {invoice && (
+                    <ScheduleEmailModal
+                      requestId={invoice.request_id}
+                      clientName={invoice.client_name}
+                      onClose={() => setIsScheduleEmailModalOpen(false)}
+                      onSuccess={(message) => {
+                        setScheduleEmailMessage(message);
+                        setTimeout(() => setScheduleEmailMessage(''), 5000);
+                      }}
+                    />
+                  )}
+                </DialogContent>
+              </Dialog>
             </>
           )}
         </div>
       </div>
 
-      <Card ref={componentRef}>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle className="text-xl">
-            <span>Request #{(editMode ? editedInvoice?.request_id : invoice?.request_id) || 'N/A'}</span>
-          </CardTitle>
-          <CardDescription>
-            Branch: {(editMode ? editedInvoice?.branch : invoice?.branch) || 'N/A'}
-          </CardDescription>
+      {scheduleEmailMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-md mb-4">
+          <div className="flex items-center">
+            <Clock className="h-5 w-5 mr-2" />
+            <span>{scheduleEmailMessage}</span>
+          </div>
+        </div>
+      )}
+
+      <Card ref={componentRef} className="pr-8">
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div className="flex items-start gap-6 w-full">
+          {showLogo && (
+            <div className="flex-shrink-0">
+              <img 
+                src="/eleven8logo.svg" 
+                alt="eleven8 Logo" 
+                className="h-28 w-auto object-contain"
+              />
+            </div>
+          )}
+          
+          {/* Invoice Title and Branch Info */}
+          <div className="flex-grow mt-2">
+            <CardTitle className="text-xl">
+              <span>Request #{(editMode ? editedInvoice?.request_id : invoice?.request_id) || 'N/A'}</span>
+            </CardTitle>
+            <CardDescription>
+              Branch: {(editMode ? editedInvoice?.branch : invoice?.branch) || 'N/A'}
+            </CardDescription>
+          </div>
         </div>
 
-        {editMode ? (
-          <Select 
-            value={editedInvoice?.status || ''} 
-            onValueChange={value => handleFieldChange('status', value)}
-          >
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Select status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="unpaid">Unpaid</SelectItem>
-              <SelectItem value="partially_paid">Partially Paid</SelectItem>
-              <SelectItem value="paid">Paid</SelectItem>
-              <SelectItem value="refunded">Refunded</SelectItem>
-            </SelectContent>
-          </Select>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Badge className={`${
-              invoice?.status === 'paid' ? 'bg-green-500' : 
-              invoice?.status === 'unpaid' ? 'bg-red-500' : 
-              invoice?.status === 'partially_paid' ? 'bg-yellow-500' : 
-              'bg-gray-500'
-            }`}>
-              {invoice?.status && typeof invoice.status === 'string' 
-                ? invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1).replace('_', ' ') 
-                : 'N/A'
-              }
-            </Badge>
+        {/* Status section - moved to the right */}
+        <div className="flex-shrink-0 mt-2">
+          {editMode ? (
+            <Select 
+              value={editedInvoice?.status || ''} 
+              onValueChange={value => handleFieldChange('status', value)}
+            >
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="unpaid">Unpaid</SelectItem>
+                <SelectItem value="partially_paid">Partially Paid</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="refunded">Refunded</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Badge className={`${
+                invoice?.status === 'paid' ? 'bg-green-500' : 
+                invoice?.status === 'unpaid' ? 'bg-red-500' : 
+                invoice?.status === 'partially_paid' ? 'bg-yellow-500' : 
+                'bg-gray-500'
+              }`}>
+                {invoice?.status && typeof invoice.status === 'string' 
+                  ? invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1).replace('_', ' ') 
+                  : 'N/A'
+                }
+              </Badge>
 
-            {invoice?.status === 'paid' && (
-              <Button 
-                variant="destructive" 
-                size="sm"
-                onClick={async () => {
-                  if (!invoice?.uuid) return;
-                  try {
-                    const refund = await refundInvoice(invoice.uuid);
-                    if ('refund' in refund) {
-                      alert(`Refund successful: ${refund.refund}`);
-                    } else {
-                      alert('An error occurred while refunding');
+              {invoice?.status === 'paid' && (
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={async () => {
+                    if (!invoice?.uuid) return;
+                    try {
+                      const refund = await refundInvoice(invoice.uuid);
+                      if ('refund' in refund) {
+                        alert(`Refund successful: ${refund.refund}`);
+                      } else {
+                        alert('An error occurred while refunding');
+                      }
+                    } catch (error) {
+                      console.error('Refund error:', error);
+                      alert((error as Error).message || 'An error occurred while refunding');
                     }
-                  } catch (error) {
-                    console.error('Refund error:', error);
-                    alert((error as Error).message || 'An error occurred while refunding');
-                  }
-                }}
-              >
-                Refund
-              </Button>
-            )}
-          </div>
-        )}
+                  }}
+                >
+                  Refund
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-8">
@@ -463,7 +579,7 @@ export function InvoiceCard() {
             </div>
             
             <div>
-              <h3 className="font-medium mb-2">Invoice Details</h3>
+              <h3 className="font-medium mt-4 mb-2">Invoice Details</h3>
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div className="text-muted-foreground">Due Date:</div>
                 {editMode && editedInvoice ? (
@@ -554,6 +670,37 @@ export function InvoiceCard() {
 
           <Separator className="my-6" />
           
+          {/* Custom Requirements Section */}
+          {request?.CustomRequirementsText && request.CustomRequirementsText.trim() && !editMode &&
+           (rawStaffRequirements.length === 0 || rawStaffRequirements.every(req => req.count === 0)) && (
+            <div className="mb-6">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-orange-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <h3 className="text-sm font-medium text-orange-800 mb-2">⚠️ Custom Requirements - Manual Processing Required</h3>
+                    <div className="bg-white border border-orange-200 rounded p-3 mb-3">
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{request.CustomRequirementsText}</p>
+                    </div>
+                    <div className="text-sm text-orange-700">
+                      <p className="font-medium mb-1">Action Required:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Review the custom requirements above</li>
+                        <li>Add appropriate line items using the "Edit" button</li>
+                        <li>Set correct quantities, rates, and descriptions</li>
+                        <li>Update invoice total and send to client</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div className="mb-6">
             <h3 className="font-medium mb-2">Notes</h3>
             {editMode && editedInvoice ? (
@@ -588,7 +735,7 @@ export function InvoiceCard() {
                   if (startTime && endTime && endTime > startTime) {
                     hours = (endTime.getTime() - startTime.getTime()) / 3600000;
                   }
-                  const amount = (requirement.rate || 0) * hours * (requirement.count || 0);
+                  // const amount = (requirement.rate || 0) * hours * (requirement.count || 0);
 
                   return (
                     <TableRow key={requirement.uuid || `staff-${index}`}>
@@ -679,7 +826,15 @@ export function InvoiceCard() {
                       <span className="font-medium">{requirement.position}</span>
                       <div className="flex flex-col gap-2">
                         <span className="text-sm text-muted-foreground">
-                          {(requirement.date ? new Date(requirement.date).toLocaleDateString() : 'N/A')} ({requirement.start_time || 'N/A'} - {requirement.end_time || 'N/A'})
+                          {(requirement.date ? new Date(requirement.date).toLocaleDateString() : 'N/A')} ({
+                            timeFormat === '12hr' 
+                              ? (requirement.start_time || 'N/A')
+                              : convertTo24Hour(requirement.start_time || 'N/A')
+                          } - {
+                            timeFormat === '12hr' 
+                              ? (requirement.end_time || 'N/A')
+                              : convertTo24Hour(requirement.end_time || 'N/A')
+                          })
                         </span>
                       </div>
                     </div>
@@ -691,7 +846,8 @@ export function InvoiceCard() {
                   <TableCell className="text-right">${(requirement.amount || 0).toFixed(2)}</TableCell>
                   {editMode && <TableCell></TableCell>}
                 </TableRow>
-              ))}
+              ))
+              }
 
               {editMode && (
                 <TableRow>
@@ -877,18 +1033,18 @@ export function InvoiceCard() {
             <span>Transaction Fee:</span>
             <span>{formatCurrency(invoice?.transaction_fee || 0)}</span>
           </div>
-          
+
+          <div className="flex w-full max-w-[200px] justify-between">
+            <span>Service Fee:</span>
+            <span>{formatCurrency(invoice?.service_fee || 0)}</span>
+          </div>
+
           {(invoice?.amount_paid || 0) > 0 && (
             <div className="flex w-full max-w-[200px] justify-between">
               <span>Amount Paid:</span>
               <span>{formatCurrency(invoice?.amount_paid || 0)}</span>
             </div>
           )}
-
-          <div className="flex w-full max-w-[200px] justify-between">
-            <span>Service Fee:</span>
-            <span>{formatCurrency(invoice?.service_fee || 0)}</span>
-          </div>
           
           <div className="flex w-full max-w-[200px] justify-between font-bold">
             <span>Balance Due:</span>

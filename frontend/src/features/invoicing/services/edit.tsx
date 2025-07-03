@@ -193,7 +193,7 @@ export const useInvoiceEditor = ({
             // Step 1: Delete removed staff requirements
             const deleteStaffPromises = deletedStaffUuids.map(async (uuid) => {
                 console.log(`Deleting staff requirement: ${uuid}`);
-                const response = await fetch(`https://evershift-personal.onrender.com/api/staff-requirements/${uuid}`, {
+                const response = await fetch(`http://localhost:3001/api/staff-requirements/${uuid}`, {
                     method: 'DELETE',
                 });
                 
@@ -215,7 +215,7 @@ export const useInvoiceEditor = ({
             // Step 2: Delete removed custom line items
             const deleteCustomLineItemPromises = deletedCustomLineItemUuids.map(async (uuid) => {
                 console.log(`Deleting custom line item: ${uuid}`);
-                const response = await fetch(`https://evershift-personal.onrender.com/api/custom-line-items/${uuid}`, {
+                const response = await fetch(`http://localhost:3001/api/custom-line-items/${uuid}`, {
                     method: 'DELETE',
                 });
                 
@@ -236,7 +236,7 @@ export const useInvoiceEditor = ({
 
             // Step 3: Update/Create remaining staff requirements
             const staffPromises = editedStaff.map((staff, index) => {
-                const baseUrl = 'https://evershift-personal.onrender.com/api/staff-requirements';
+                const baseUrl = 'http://localhost:3001/api/staff-requirements';
                 const headers = { 'Content-Type': 'application/json' };
                 
                 const basePayload = {
@@ -309,7 +309,7 @@ export const useInvoiceEditor = ({
                 // PO number removed - handled by invoice endpoint
             };
 
-            const requestResponse = await fetch(`https://evershift-personal.onrender.com/api/requests/${editedInvoice.request_id}`, {
+            const requestResponse = await fetch(`http://localhost:3001/api/requests/${editedInvoice.request_id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(requestPayload),
@@ -322,7 +322,7 @@ export const useInvoiceEditor = ({
             // Step 5: Update the invoice (including PO number) 
             console.log('DEBUG: Sending invoice update with:', JSON.stringify(editedInvoice, null, 2));
             
-            const invoiceResponse = await fetch(`https://evershift-personal.onrender.com/api/invoices/${editedInvoice.uuid}`, {
+            const invoiceResponse = await fetch(`http://localhost:3001/api/invoices/${editedInvoice.uuid}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(editedInvoice),
@@ -344,7 +344,7 @@ export const useInvoiceEditor = ({
             
             // Step 6: Update custom line items and calculate new totals
             try {
-                const ratesResponse = await fetch(`https://evershift-personal.onrender.com/api/rates/${editedInvoice.request_id}`, {
+                const ratesResponse = await fetch(`http://localhost:3001/api/rates/${editedInvoice.request_id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(customLineItems),
@@ -366,7 +366,7 @@ export const useInvoiceEditor = ({
                     balance: calculatedTotals.amount 
                 };
                 
-                const finalInvoiceResponse = await fetch(`https://evershift-personal.onrender.com/api/invoices/${editedInvoice.uuid}`, {
+                const finalInvoiceResponse = await fetch(`http://localhost:3001/api/invoices/${editedInvoice.uuid}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(updatedInvoiceWithTotals),

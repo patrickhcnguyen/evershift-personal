@@ -16,6 +16,7 @@ type Invoice struct {
 	TransactionFee    float64
 	ServiceFee        float64
 	Amount            float64
+	AmountPaid        float64
 	Balance           float64
 	Status            string
 	PaymentTerms      string
@@ -26,7 +27,7 @@ type Invoice struct {
 	PaymentIntent     string
 	LastSent          time.Time `json:"last_sent"`
 	FollowUpCount     int       `json:"follow_up_count"`
-	FollowUpDelayDays int       `json:"follow_up_delay_days"`
+	FollowUpDelayDays int       `json:"follow_up_delay"`
 
 	TermsAndConditions string  `json:"terms_and_conditions"`
 	Request            Request `gorm:"foreignKey:RequestID"`

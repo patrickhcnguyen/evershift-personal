@@ -5,10 +5,15 @@ package repository
 import (
 	"backend/internal/core/models"
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
+	"github.com/google/uuid"
 	"github.com/mailgun/mailgun-go/v4"
 )
 
@@ -16,16 +21,22 @@ type EmailRepository struct {
 	mg     *mailgun.MailgunImpl
 	domain string
 	from   string
+	redis  *redis.Client
 }
 
-func NewEmailRepository(domain, from, apiKey string) *EmailRepository {
+func NewEmailRepository(domain, from, apiKey string, redis *redis.Client) *EmailRepository {
 
 	mg := mailgun.NewMailgun(domain, apiKey)
 	return &EmailRepository{
 		mg:     mg,
 		domain: domain,
 		from:   from,
+		redis:  redis,
 	}
+}
+
+type RedisEmailScheduler struct {
+	rdb *redis.Client
 }
 
 func (r *EmailRepository) SendEmail(ctx context.Context, invoice *models.Invoice, staffRequirements []models.StaffRequirement) error {
@@ -55,8 +66,8 @@ func (r *EmailRepository) SendEmail(ctx context.Context, invoice *models.Invoice
 
 	subject := fmt.Sprintf("Request #%s from Evershift", requestID)
 
-	message := mailgun.NewMessage(r.from, subject, "", clientEmail)
-	message.SetHTML(htmlBody)
+	message := r.mg.NewMessage(r.from, subject, "", clientEmail)
+	message.SetHtml(htmlBody)
 	message.SetReplyTo("Evershift Support <support@evershift.co>")
 
 	_, _, err := r.mg.Send(ctx, message)
@@ -85,7 +96,7 @@ func (r *EmailRepository) SendEmailWithPaymentURL(ctx context.Context, invoice *
 
 	subject := fmt.Sprintf("Request #%s from Evershift", requestID)
 
-	message := mailgun.NewMessage(r.from, subject, "", clientEmail)
+	message := r.mg.NewMessage(r.from, subject, "", clientEmail)
 	message.SetHTML(htmlBody)
 	message.SetReplyTo("Evershift Support <support@evershift.co>")
 
@@ -96,7 +107,7 @@ func (r *EmailRepository) SendEmailWithPaymentURL(ctx context.Context, invoice *
 	return nil
 }
 
-func (r *EmailRepository) SendCustomEmail(ctx context.Context, invoice *models.Invoice, staffRequirements []models.StaffRequirement, emailContent string, headers models.EmailHeaders, attachmentData []byte, filename string) error {
+func (r *EmailRepository) SendCustomEmail(ctx context.Context, invoice *models.Invoice, staffRequirements []models.StaffRequirement, emailContent string, headers models.EmailHeaders, attachmentData []byte, filename string, paymentURL string) error {
 	if r.domain == "" || r.from == "" {
 		return fmt.Errorf("mailgun configuration missing")
 	}
@@ -113,11 +124,75 @@ func (r *EmailRepository) SendCustomEmail(ctx context.Context, invoice *models.I
 		subject = fmt.Sprintf("Request #%s from Evershift", requestID)
 	}
 
-	message := mailgun.NewMessage(r.from, subject, "", clientEmail)
+	cleanContent := strings.TrimSpace(emailContent)
+	cleanContent = strings.ReplaceAll(cleanContent, "\n\n\n\n", "\n\n")
+	cleanContent = strings.ReplaceAll(cleanContent, "\n\n\n", "\n\n")
 
-	// Wrap custom content in styled template
-	styledContent := r.generateCustomEmailHTML(emailContent, invoice.Request.FirstName+" "+invoice.Request.LastName, requestID)
-	message.SetHTML(styledContent)
+	paragraphs := strings.Split(cleanContent, "\n\n")
+	var htmlParagraphs []string
+
+	for _, paragraph := range paragraphs {
+		if strings.TrimSpace(paragraph) != "" {
+			htmlParagraph := strings.ReplaceAll(strings.TrimSpace(paragraph), "\n", "<br>")
+			htmlParagraphs = append(htmlParagraphs, fmt.Sprintf("<p>%s</p>", htmlParagraph))
+		}
+	}
+
+	htmlEmailContent := strings.Join(htmlParagraphs, "")
+	finalEmailContent := fmt.Sprintf(`
+<!DOCTYPE html>
+<html>
+<head>
+	<style>
+		body { 
+			font-family: Arial, sans-serif; 
+			line-height: 1.6; 
+			color: #333; 
+			max-width: 600px; 
+			margin: 0 auto; 
+			padding: 20px;
+		}
+		p {
+			margin: 0 0 16px 0;
+		}
+		.content {
+			margin-bottom: 20px;
+		}
+	</style>
+</head>
+<body>
+	<div class="content">%s</div>
+	%%s
+</body>
+</html>`, htmlEmailContent)
+
+	// If a payment URL is provided, append a payment button to the email content
+	if paymentURL != "" {
+		paymentButtonHTML := fmt.Sprintf(`
+<div style="margin: 20px 0; text-align: center;">
+	<a href="%s" 
+	   style="display: inline-block; 
+	          background-color: #22c55e; 
+	          color: white; 
+	          padding: 12px 24px; 
+	          text-decoration: none; 
+	          border-radius: 6px; 
+	          font-weight: bold; 
+	          border: none;">
+		Pay Invoice - %s
+	</a>
+</div>
+<p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 10px;">
+	Click the button above to pay your invoice securely online
+</p>`, paymentURL, r.formatCurrency(invoice.Balance))
+
+		finalEmailContent = fmt.Sprintf(finalEmailContent, paymentButtonHTML)
+	} else {
+		finalEmailContent = fmt.Sprintf(finalEmailContent, "")
+	}
+
+	message := r.mg.NewMessage(r.from, subject, "", clientEmail)
+	message.SetHtml(finalEmailContent)
 
 	if headers.ReplyTo != "" {
 		message.SetReplyTo(headers.ReplyTo)
@@ -187,7 +262,6 @@ func (r *EmailRepository) generateEmailHTML(invoice *models.Invoice, clientName,
 		notesHTML = fmt.Sprintf(`<div class="notes"><h3>Notes</h3><p>%s</p></div>`, invoice.Notes)
 	}
 
-	// Generate payment button HTML
 	paymentButtonHTML := ""
 	if paymentURL != "" {
 		paymentButtonHTML = fmt.Sprintf(`
@@ -316,14 +390,12 @@ func (r *EmailRepository) SendFollowUpEmails(ctx context.Context, invoices []mod
 			continue
 		}
 
-		// Get the payment URL for this invoice
 		paymentURL := paymentURLs[invoice.UUID.String()]
 
-		// Create follow-up email with payment URL
 		subject := fmt.Sprintf("Follow-up: Outstanding Invoice #%s from Evershift", requestID)
 		htmlBody := r.generateFollowUpEmailHTML(&invoice, clientName, requestID, paymentURL)
 
-		message := mailgun.NewMessage(r.from, subject, "", clientEmail)
+		message := r.mg.NewMessage(r.from, subject, "", clientEmail)
 		message.SetHTML(htmlBody)
 		message.SetReplyTo("Evershift Support <support@evershift.co>")
 
@@ -429,59 +501,100 @@ func (r *EmailRepository) generateFollowUpEmailHTML(invoice *models.Invoice, cli
 	)
 }
 
-func (r *EmailRepository) generateCustomEmailHTML(emailContent, clientName, requestID string) string {
-	return fmt.Sprintf(`
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { 
-      font-family: Arial, sans-serif; 
-      line-height: 1.6; 
-      color: #333; 
-      margin: 0; 
-      padding: 0; 
-    }
-    .container { 
-      max-width: 600px; 
-      margin: 0 auto; 
-      padding: 20px; 
-      background-color: #ffffff; 
-    }
-    .header { 
-      text-align: center; 
-      padding-bottom: 20px; 
-      border-bottom: 1px solid #eee; 
-      margin-bottom: 20px; 
-    }
-    .content { 
-      white-space: pre-wrap; 
-      margin: 20px 0; 
-    }
-    .footer { 
-      margin-top: 30px; 
-      padding-top: 20px; 
-      text-align: center; 
-      font-size: 12px; 
-      color: #777; 
-      border-top: 1px solid #eee; 
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>Message from Evershift</h1>
-      <p>Request #%s</p>
-    </div>
-    
-    <div class="content">%s</div>
-    
-    <div class="footer">
-      <p>If you have any questions, please contact us at support@evershift.co</p>
-      <p>Thank you for your business!</p>
-    </div>
-  </div>
-</body>
-</html>`, requestID, emailContent)
+func (r *EmailRepository) ScheduleEmail(ctx context.Context, invoice *models.Invoice, staffRequirements []models.StaffRequirement, sendAt time.Time, customContent string, headers models.EmailHeaders, paymentURL string) error {
+	if r.domain == "" || r.from == "" {
+		return fmt.Errorf("mailgun configuration missing")
+	}
+
+	var subject, htmlBody, replyTo string
+	var cc, bcc []string
+
+	if customContent != "" {
+		subject = headers.Subject
+		if subject == "" {
+			subject = fmt.Sprintf("Request #%s from Evershift", invoice.RequestID.String())
+		}
+
+		htmlBody = customContent
+		if paymentURL != "" {
+			paymentButtonHTML := fmt.Sprintf(`
+<div style="margin: 20px 0; text-align: center;">
+	<a href="%s" 
+	   style="display: inline-block; 
+	          background-color: #22c55e; 
+	          color: white; 
+	          padding: 12px 24px; 
+	          text-decoration: none; 
+	          border-radius: 6px; 
+	          font-weight: bold; 
+	          border: none;">
+		Pay Invoice - %s
+	</a>
+</div>
+<p style="color: #6b7280; font-size: 12px; text-align: center; margin-top: 10px;">
+	Click the button above to pay your invoice securely online
+</p>`, paymentURL, r.formatCurrency(invoice.Balance))
+
+			htmlBody = customContent + paymentButtonHTML
+		}
+
+		replyTo = headers.ReplyTo
+		if replyTo == "" {
+			replyTo = "Evershift Support <support@evershift.co>"
+		}
+		cc = headers.CC
+		bcc = headers.BCC
+	} else {
+		clientName := invoice.Request.FirstName + " " + invoice.Request.LastName
+		requestID := invoice.RequestID.String()
+		staffRowsHTML := r.generateStaffRows(staffRequirements)
+		htmlBody = r.generateEmailHTML(invoice, clientName, staffRowsHTML, paymentURL, requestID)
+		subject = fmt.Sprintf("Request #%s from Evershift", requestID)
+		replyTo = "Evershift Support <support@evershift.co>"
+	}
+
+	email := models.Email{
+		RequestID: invoice.RequestID,
+		ID:        uuid.New(),
+		Subject:   subject,
+		Content:   htmlBody,
+		ReplyTo:   replyTo,
+		CC:        cc,
+		BCC:       bcc,
+		SendAt:    sendAt,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	key := "scheduled_email:" + email.ID.String()
+	jsonData, err := json.Marshal(email)
+	if err != nil {
+		return fmt.Errorf("failed to marshal email data: %w", err)
+	}
+
+	log.Printf("DEBUG: About to store email with key: %s", key)
+	log.Printf("DEBUG: Email ID: %s", email.ID.String())
+	log.Printf("DEBUG: Send timestamp: %d", sendAt.Unix())
+	log.Printf("DEBUG: Using custom content: %v", customContent != "")
+
+	expiration := time.Until(sendAt) + (48 * time.Hour)
+	err = r.redis.Set(ctx, key, jsonData, expiration).Err()
+	if err != nil {
+		return fmt.Errorf("failed to store email data in Redis: %w", err)
+	}
+
+	log.Printf("DEBUG: Stored email data in Redis, expires in: %v", expiration)
+
+	err = r.redis.ZAdd(ctx, "scheduled_emails", redis.Z{
+		Score:  float64(sendAt.Unix()),
+		Member: email.ID.String(),
+	}).Err()
+
+	if err != nil {
+		return fmt.Errorf("failed to add email to scheduled queue: %w", err)
+	}
+
+	log.Printf("DEBUG: Added to sorted set with score: %f", float64(sendAt.Unix()))
+
+	return nil
 }

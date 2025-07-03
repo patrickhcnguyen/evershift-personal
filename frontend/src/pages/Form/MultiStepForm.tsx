@@ -8,6 +8,25 @@ import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { geocodeAndFindNearestOffice } from './locationService';
 import { useNavigate } from 'react-router-dom';
+import { Input } from '@/components/ui/input';
+const customStaff = '/customStaff.jpeg';
+
+const CustomDateInput = React.forwardRef<HTMLInputElement, { value?: string, onClick?: () => void, placeholder?: string }>((props, ref) => {
+    const { value, onClick, placeholder } = props;
+    const displayValue = value?.endsWith(' - ') ? value.slice(0, -3) : value;
+
+    return (
+        <input
+            ref={ref}
+            className="date-picker-input"
+            onClick={onClick}
+            value={displayValue}
+            placeholder={placeholder}
+            readOnly
+        />
+    );
+});
+CustomDateInput.displayName = 'CustomDateInput';
 
 interface StaffRequirement {
   date: string;
@@ -26,6 +45,17 @@ interface StaffInput {
 
 interface DateStaffInputs {
   [date: string]: Record<string, StaffInput>;
+}
+
+interface DeletedPosition {
+  date: string;
+  position: string;
+  timestamp: number;
+  id: string;
+}
+
+interface DateDeletedPositions {
+  [date: string]: string[];
 }
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -52,6 +82,12 @@ const MultiStepForm: React.FC = () => {
   } as const;
 
   const positions = Object.keys(positionImages);
+
+  const [useCustomRequirements, setUseCustomRequirements] = useState(false);
+  const [customRequirementsText, setCustomRequirementsText] = useState('');
+
+  const [deletedPositions, setDeletedPositions] = useState<DateDeletedPositions>({});
+  const [recentlyDeleted, setRecentlyDeleted] = useState<DeletedPosition[]>([]);
 
   useEffect(() => {
     if (currentStep === 3) {
@@ -107,12 +143,22 @@ const MultiStepForm: React.FC = () => {
         ? prev.filter((p) => p !== position)
         : [...prev, position]
     );
+    if (useCustomRequirements) {
+      setUseCustomRequirements(false);
+      setCustomRequirementsText('');
+    }
   };
 
   const nextStep = (step: number) => {
-    if (step === 1 && selectedPositions.length === 0) {
-      alert('Please select at least one position.');
-      return;
+    if (step === 1) {
+      if (!useCustomRequirements && selectedPositions.length === 0) {
+        alert('Please select at least one position or choose custom requirements.');
+        return;
+      }
+      if (useCustomRequirements && !customRequirementsText.trim()) {
+        alert('Please describe your custom staffing requirements.');
+        return;
+      }
     }
 
     if (step === 2) {
@@ -120,9 +166,13 @@ const MultiStepForm: React.FC = () => {
         alert('Please enter your company name.');
         return;
       }
+      if (useCustomRequirements) {
+        setCurrentStep(4);
+        return;
+      }
     }
 
-    if (step === 3 && !validateStaffRequirements()) {
+    if (step === 3 && !useCustomRequirements && !validateStaffRequirements()) {
       return;
     }
 
@@ -130,6 +180,10 @@ const MultiStepForm: React.FC = () => {
   };
 
   const prevStep = (step: number) => {
+    if (step === 4 && useCustomRequirements) {
+      setCurrentStep(2); 
+      return;
+    }
     setCurrentStep(step - 1);
   };
 
@@ -138,6 +192,10 @@ const MultiStepForm: React.FC = () => {
   };
 
   const validateStaffRequirements = () => {
+    if (useCustomRequirements) {
+      return true; 
+    }
+    
     const inputs = document.querySelectorAll('#staffRequirements input');
     for (let i = 0; i < inputs.length; i++) {
       if (!(inputs[i] as HTMLInputElement).value) {
@@ -176,7 +234,7 @@ const MultiStepForm: React.FC = () => {
                 type="time" 
                 id="${safePosition}-start"
                 name="${safePosition}-start" 
-                class="w-full p-2 border rounded-md"
+                class="bg-background appearance-none w-full p-2 border rounded-md [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
                 required 
               />
             </div>
@@ -186,7 +244,7 @@ const MultiStepForm: React.FC = () => {
                 type="time" 
                 id="${safePosition}-end"
                 name="${safePosition}-end" 
-                class="w-full p-2 border rounded-md"
+                class="bg-background appearance-none w-full p-2 border rounded-md [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
                 required 
               />
             </div>
@@ -227,23 +285,23 @@ const MultiStepForm: React.FC = () => {
                     </div>
                     <div>
                       <label htmlFor={`${formattedDate}-${safePosition}-start`}>Start Time:</label>
-                      <input 
+                      <Input 
                         type="time" 
                         id={`${formattedDate}-${safePosition}-start`}
                         value={staffInputs[formattedDate]?.[position]?.startTime || ''}
                         onChange={(e) => handleStaffInputChange(formattedDate, position, 'startTime', e.target.value)}
-                        className="w-full p-2 border rounded-md"
+                        className="bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
                         required 
                       />
                     </div>
                     <div>
                       <label htmlFor={`${formattedDate}-${safePosition}-end`}>End Time:</label>
-                      <input 
+                      <Input 
                         type="time" 
                         id={`${formattedDate}-${safePosition}-end`}
                         value={staffInputs[formattedDate]?.[position]?.endTime || ''}
                         onChange={(e) => handleStaffInputChange(formattedDate, position, 'endTime', e.target.value)}
-                        className="w-full p-2 border rounded-md"
+                        className="bg-background appearance-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
                         required 
                       />
                     </div>
@@ -276,7 +334,7 @@ const MultiStepForm: React.FC = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
   
-    const staffRequirements: StaffRequirement[] = selectedDates.flatMap(date => {
+    const staffRequirements: StaffRequirement[] = useCustomRequirements ? [] : selectedDates.flatMap(date => {
       const formattedDate = formatDate(date, 'yyyy-MM-dd');
       return selectedPositions
         .map(position => {
@@ -307,6 +365,7 @@ const MultiStepForm: React.FC = () => {
       end_date: dateRange[1] ? formatDate(dateRange[1], 'yyyy-MM-dd') : null,
       is_company: formData.isCompany || false,
       company_name: formData.isCompany ? formData.companyName || "" : "",
+      custom_requirements_text: useCustomRequirements ? customRequirementsText : "",
       staff_requirements: staffRequirements.map(req => {
         const startDateTime = new Date(`${req.date}T${req.start_time}`);
         const endDateTime = new Date(`${req.date}T${req.end_time}`);
@@ -332,7 +391,7 @@ const MultiStepForm: React.FC = () => {
     };
   
     try {
-      const response = await fetch('https://evershift-personal.onrender.com/api/requests', {
+      const response = await fetch('http://localhost:3001/api/requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestPayload),
@@ -364,6 +423,8 @@ const MultiStepForm: React.FC = () => {
     setSelectedPositions([]);
     setSelectedDates([]);
     setStaffInputs({});
+    setUseCustomRequirements(false);
+    setCustomRequirementsText('');
   };
 
 
@@ -379,20 +440,97 @@ const MultiStepForm: React.FC = () => {
           {currentStep === 1 && (
             <div className="form-step active">
               <h2>What type of staff are you looking for?</h2>
-              <p className="select-instruction">Select all that apply:</p>
+              <p className="select-instruction">Select staff positions OR describe custom requirements:</p>
+              
               <div className="position-grid">
                 {positions.map((position) => (
                   <div
                     key={position}
-                    className={`position-item ${selectedPositions.includes(position) ? 'selected' : ''}`}
-                    onClick={() => handleSelectPosition(position)}
+                    className={`position-item ${selectedPositions.includes(position) && !useCustomRequirements ? 'selected' : ''} ${useCustomRequirements ? 'disabled' : ''}`}
+                    onClick={() => {
+                      if (!useCustomRequirements) {
+                        handleSelectPosition(position);
+                      }
+                    }}
                     data-position={position}
                   >
                     <img src={positionImages[position]} alt={position} />
                     <div className="overlay">{position}</div>
                   </div>
                 ))}
+                
+                {/* Custom Requirements Option */}
+                <div
+                  className={`position-item custom-requirements ${useCustomRequirements ? 'selected' : ''} ${selectedPositions.length > 0 ? 'disabled' : ''}`}
+                  onClick={() => {
+                    if (selectedPositions.length === 0) {
+                      const newCustomState = !useCustomRequirements;
+                      setUseCustomRequirements(newCustomState);
+                      if (newCustomState) {
+                        setSelectedPositions([]);
+                      } else {
+                        setCustomRequirementsText('');
+                      }
+                    }
+                  }}
+                >
+                  <img src={customStaff} alt="Custom Requirements" />
+                  <div className="overlay">
+                    <div style={{ fontWeight: 'bold', marginBottom: '5px' }}>Custom Requirements</div>
+                    <div style={{ fontSize: '0.8rem' }}>
+                      {selectedPositions.length > 0 
+                        ? 'Clear position selections first' 
+                        : 'Describe your specific staffing needs'
+                      }
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              {useCustomRequirements && (
+                <div className="mt-8">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-start">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-blue-800">Custom Requirements</h3>
+                        <div className="mt-2 text-sm text-blue-700">
+                          <p>Our team will review your requirements and create a detailed quote. You'll receive a follow-up within 24 hours.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="customRequirements" className="block text-sm font-medium text-gray-700 mb-2">
+                      Describe your staffing needs:
+                    </label>
+                    <textarea
+                      id="customRequirements"
+                      value={customRequirementsText}
+                      onChange={(e) => setCustomRequirementsText(e.target.value)}
+                      className="w-full p-3 border border-gray-300 rounded-md focus:ring-primary focus:border-primary"
+                      rows={6}
+                      placeholder="Please describe your staffing requirements in detail. Include:
+• Specific positions needed (e.g., bartenders, brand ambassadors, etc.)
+• Number of staff for each position  
+• Working hours and dates
+• Any special requirements or skills needed
+• Event details and timeline
+
+Example:
+March 15-16: 2 bartenders (6pm-11pm daily), 4 brand ambassadors (5pm-10pm daily)
+Special requirements: Black attire, cocktail experience for bartenders"
+                      required={useCustomRequirements}
+                    />
+                  </div>
+                </div>
+              )}
+
               <input type="hidden" name="selectedPositions" value={JSON.stringify(selectedPositions)} />
               <button type="button" onClick={() => nextStep(1)}>Next</button>
             </div>
@@ -449,30 +587,37 @@ const MultiStepForm: React.FC = () => {
               <h2>Event Information</h2>
               <div className="date-picker-container">
                 <label>Event Date(s):</label>
+                <p className="text-sm text-gray-600 mb-2">
+                  Click one date for single-day events, or click and drag to select a date range for multi-day events.
+                </p>
                 <DatePicker
                   selected={dateRange[0]}
                   onChange={(dates) => {
-                    const [start, end] = dates as [Date, Date];
+                    const [start, end] = dates as [Date | null, Date | null];
                     setDateRange([start, end]);
                     
-                    if (start && end) {
-                      const dateArray: Date[] = [];
-                      let currentDate = new Date(start);
-                      
-                      while (currentDate <= end) {
-                        dateArray.push(new Date(currentDate));
-                        currentDate.setDate(currentDate.getDate() + 1);
+                    if (start) {
+                      if (end) {
+                        const dateArray: Date[] = [];
+                        let currentDate = new Date(start);
+                        
+                        while (currentDate <= end) {
+                          dateArray.push(new Date(currentDate));
+                          currentDate.setDate(currentDate.getDate() + 1);
+                        }
+                        setSelectedDates(dateArray);
+                      } else {
+                        setSelectedDates([start]);
                       }
-                      setSelectedDates(dateArray);
                     } else {
-                      setSelectedDates(start ? [start] : []);
+                      setSelectedDates([]);
                     }
                   }}
                   startDate={dateRange[0]}
                   endDate={dateRange[1]}
                   selectsRange
                   minDate={new Date()}
-                  placeholderText="Select event date range"
+                  placeholderText="Select event date(s)"
                   className="date-picker-input"
                   calendarClassName="date-picker-calendar"
                   wrapperClassName="date-picker-wrapper"
@@ -480,7 +625,17 @@ const MultiStepForm: React.FC = () => {
                     strategy: "fixed"
                   }}
                   popperPlacement="bottom-start"
+                  isClearable
+                  customInput={<CustomDateInput />}
                 />
+                {selectedDates.length > 0 && (
+                  <div className="mt-2 text-sm text-green-600">
+                    {selectedDates.length === 1 
+                      ? `Selected: ${formatDate(selectedDates[0], 'MMMM d, yyyy')} (Single day event)`
+                      : `Selected: ${formatDate(selectedDates[0], 'MMMM d')} - ${formatDate(selectedDates[selectedDates.length - 1], 'MMMM d, yyyy')} (${selectedDates.length} days)`
+                    }
+                  </div>
+                )}
               </div>
               <label>What kind of event is this?</label>
               <input
@@ -504,7 +659,7 @@ const MultiStepForm: React.FC = () => {
           )}
 
           {/* Step 3 */}
-          {currentStep === 3 && (
+          {currentStep === 3 && !useCustomRequirements && (
             <div className="form-step active">
               <h2>Staff Requirements</h2>
               <div id="staffRequirements">

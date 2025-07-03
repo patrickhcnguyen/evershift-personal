@@ -89,16 +89,17 @@ func NewRouter(
 			geolocationGroup.GET("/geocode", geolocationHandler.GeoCodeAddress)
 			geolocationGroup.GET("/nearest-branch", geolocationHandler.FindClosestBranch)
 		}
-		invoiceGroup := apiGroup.Group("/invoices")
+		invoicesGroup := apiGroup.Group("/invoices")
 		{
-			invoiceGroup.GET("", invoiceHandler.GetInvoiceByRequestID)
-			invoiceGroup.GET("/request/:id", invoiceHandler.GetInvoiceByRequestID)
-			invoiceGroup.GET(":id", invoiceHandler.GetInvoiceByID)
-			invoiceGroup.GET("/branch/:branch_id", invoiceHandler.GetInvoiceByBranchID)
-			invoiceGroup.GET("/overdue/:branch_id", invoiceHandler.CheckForOverdueInvoices)
-			invoiceGroup.POST("", invoiceHandler.CreateInvoice)
-			invoiceGroup.PUT(":id", invoiceHandler.UpdateInvoice)
-			invoiceGroup.DELETE(":id", invoiceHandler.DeleteInvoice)
+			invoicesGroup.GET("", invoiceHandler.GetInvoiceByRequestID)
+			invoicesGroup.GET("/request/:id", invoiceHandler.GetInvoiceByRequestID)
+			invoicesGroup.GET(":id", invoiceHandler.GetInvoiceByID)
+			invoicesGroup.GET("/branch/:branch_id", invoiceHandler.GetInvoiceByBranchID)
+			invoicesGroup.GET("/overdue/:branch_id", invoiceHandler.CheckForOverdueInvoices)
+			invoicesGroup.POST("", invoiceHandler.CreateInvoice)
+			invoicesGroup.PUT(":id", invoiceHandler.UpdateInvoice)
+			invoicesGroup.DELETE(":id", invoiceHandler.DeleteInvoice)
+			invoicesGroup.POST(":id/recalculate", invoiceHandler.RecalculateInvoiceWithNewItems)
 		}
 		// eventGroup := apiGroup.Group("/events")
 		// {
@@ -145,7 +146,7 @@ func NewRouter(
 		{
 			emailGroup.POST("/send/:request_id", emailHandler.SendEmail)
 			emailGroup.POST("/send-custom/:request_id", emailHandler.SendCustomEmail)
-			emailGroup.POST("/follow-up/:branch_id", emailHandler.SendFollowUpEmails)
+			emailGroup.POST("/schedule/:request_id", emailHandler.ScheduleEmail)
 		}
 		stripeGroup := apiGroup.Group("/stripe")
 		{
@@ -170,7 +171,8 @@ func NewRouter(
 		}
 		adminRoutes := apiGroup.Group("/admin")
 		{
-			adminRoutes.POST("/followups/trigger", cronHandler.TriggerFollowUpsByDelay)
+			adminRoutes.POST("/cron/run", cronHandler.Run)
+			adminRoutes.POST("/cron/stop", cronHandler.Stop)
 		}
 	}
 

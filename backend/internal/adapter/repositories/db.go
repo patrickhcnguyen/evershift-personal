@@ -7,12 +7,12 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	// "gorm.io/gorm/logger"
 )
 
 func NewDatabase(dsn string) (*gorm.DB, error) {
 	config := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		// Logger: logger.Default.LogMode(logger.Info),
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), config)

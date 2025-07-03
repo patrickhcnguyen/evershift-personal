@@ -5,6 +5,7 @@ import (
 	"backend/internal/core/models"
 	"backend/internal/core/ports"
 	"context"
+	"fmt"
 
 	// "fmt"
 	// "time"
@@ -13,16 +14,18 @@ import (
 )
 
 type InvoiceService struct {
-	invoiceRepo ports.InvoiceRepository
-	requestRepo ports.RequestRepository
-	cfg         *config.Config
+	invoiceRepo        ports.InvoiceRepository
+	requestRepo        ports.RequestRepository
+	rateCalculatorRepo ports.CalculateRatesRepository
+	cfg                *config.Config
 }
 
-func NewInvoiceService(invoiceRepo ports.InvoiceRepository, requestRepo ports.RequestRepository, cfg *config.Config) ports.InvoiceService {
+func NewInvoiceService(invoiceRepo ports.InvoiceRepository, requestRepo ports.RequestRepository, rateCalculatorRepo ports.CalculateRatesRepository, cfg *config.Config) ports.InvoiceService {
 	return &InvoiceService{
-		invoiceRepo: invoiceRepo,
-		requestRepo: requestRepo,
-		cfg:         cfg,
+		invoiceRepo:        invoiceRepo,
+		requestRepo:        requestRepo,
+		rateCalculatorRepo: rateCalculatorRepo,
+		cfg:                cfg,
 	}
 }
 
@@ -102,4 +105,52 @@ func (s *InvoiceService) DeleteInvoice(ctx context.Context, id uuid.UUID) error 
 
 func (s *InvoiceService) CheckForOverdueInvoices(ctx context.Context) ([]models.Invoice, error) {
 	return s.invoiceRepo.CheckForOverdueInvoices(ctx)
+}
+
+// RecalculateInvoiceAfterPaymentWithNewItems recalculates invoice totals when new custom line items
+// are added to an already paid or partially paid invoice
+func (s *InvoiceService) RecalculateInvoiceAfterPaymentWithNewItems(ctx context.Context, invoiceID uuid.UUID, newCustomLineItems []models.CustomLineItems) (*models.Invoice, error) {
+	// Get the existing invoice
+	invoice, err := s.GetInvoiceByID(ctx, invoiceID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get invoice: %w", err)
+	}
+
+	// Get the request associated with this invoice
+	request, err := s.requestRepo.GetRequestById(ctx, invoice.RequestID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get request: %w", err)
+	}
+
+	// Use existing UpdateRates functionality to recalculate totals including custom line items
+	newAmount, newTransactionFee, newServiceFee, newSubtotal, err := s.rateCalculatorRepo.UpdateRates(ctx, &request, newCustomLineItems)
+	if err != nil {
+		return nil, fmt.Errorf("failed to recalculate rates with custom line items: %w", err)
+	}
+
+	// Calculate new balance (new total amount minus what's already been paid)
+	newBalance := newAmount - invoice.AmountPaid
+
+	// Update the invoice with new totals
+	invoice.Subtotal = newSubtotal
+	invoice.TransactionFee = newTransactionFee
+	invoice.ServiceFee = newServiceFee
+	invoice.Amount = newAmount
+	invoice.Balance = newBalance
+
+	// Set status based on remaining balance
+	if newBalance <= 0.01 {
+		invoice.Status = "paid"
+		invoice.Balance = 0
+	} else {
+		invoice.Status = "partially_paid"
+	}
+
+	// Save the updated invoice
+	err = s.UpdateInvoice(ctx, invoice)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update invoice: %w", err)
+	}
+
+	return invoice, nil
 }

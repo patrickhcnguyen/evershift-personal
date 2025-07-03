@@ -1,24 +1,4 @@
-interface SendEmailResponse {
-  message: string;
-}
-
-interface EmailHeaders {
-  subject?: string;
-  cc?: string[];
-  bcc?: string[];
-  replyTo?: string;
-}
-
-interface SendEmailError {
-  error: string;
-}
-
-interface CachedEmailData {
-  content: string;
-  headers: EmailHeaders;
-  timestamp: number;
-  requestId: string;
-}
+import { EmailHeaders, SendEmailResponse, EmailError, CachedEmailData } from "../types";
 
 const EMAIL_CACHE_KEY = 'custom_email_cache';
 const CACHE_DURATION = 72 * 60 * 60 * 1000; // 3 days cached in local storage 
@@ -72,7 +52,7 @@ export const clearDraftEmail = (requestId: string): void => {
 
 export const sendInvoiceEmail = async (requestId: string): Promise<SendEmailResponse> => {
   try {
-    const response = await fetch(`https://evershift-personal.onrender.com/api/emails/send/${requestId}`, {
+    const response = await fetch(`http://localhost:3001/api/emails/send/${requestId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -86,7 +66,7 @@ export const sendInvoiceEmail = async (requestId: string): Promise<SendEmailResp
     }
 
     if (!response.ok) {
-      const errorData: SendEmailError = await response.json();
+      const errorData: EmailError = await response.json();
       throw new Error(errorData.error || 'Failed to send email');
     }
 
@@ -102,7 +82,8 @@ export const sendCustomEmail = async (
   requestId: string, 
   emailContent: string, 
   headers: EmailHeaders = {},
-  pdfFile?: File | null
+  pdfFile?: File | null,
+  paymentUrl?: string
 ): Promise<SendEmailResponse> => {
   try {
     const formData = new FormData();
@@ -114,7 +95,11 @@ export const sendCustomEmail = async (
       formData.append('invoicePDF', pdfFile);
     }
 
-    const response = await fetch(`https://evershift-personal.onrender.com/api/emails/send-custom/${requestId}`, {
+    if (paymentUrl) {
+      formData.append('paymentUrl', paymentUrl);
+    }
+
+    const response = await fetch(`http://localhost:3001/api/emails/send-custom/${requestId}`, {
       method: 'POST',
       body: formData,
     });
@@ -126,7 +111,7 @@ export const sendCustomEmail = async (
     }
 
     if (!response.ok) {
-      const errorData: SendEmailError = await response.json();
+      const errorData: EmailError = await response.json();
       throw new Error(errorData.error || 'Failed to send custom email');
     }
 

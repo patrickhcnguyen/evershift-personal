@@ -15,6 +15,8 @@ type Email struct {
 	ReplyTo   string    `gorm:"not null"`
 	CreatedAt time.Time `gorm:"not null"`
 	UpdatedAt time.Time `gorm:"not null"`
+	Content   string    `gorm:"not null"`
+	SendAt    time.Time `gorm:"not null"`
 }
 
 type EmailHeaders struct {

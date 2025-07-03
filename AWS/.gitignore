@@ -25,3 +25,4 @@ terraform.rc
 # lambda build artifacts
 *.zip
 main
+.DS_Store

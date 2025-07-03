@@ -1,2 +1,4 @@
 *.pem
 **/certs/
+env.json
+.DS_Store

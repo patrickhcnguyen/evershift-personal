@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -25,8 +26,9 @@ func (r *RequestRepository) CreateRequest(ctx context.Context, request *models.R
 		request.UUID = uuid.New()
 	}
 
+	request.DateRequested = time.Now().UTC()
+
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Create the request
 		if err := tx.Create(request).Error; err != nil {
 			return err
 		}

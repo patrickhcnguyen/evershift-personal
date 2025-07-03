@@ -25,4 +25,5 @@ type InvoiceService interface {
 	UpdateInvoice(ctx context.Context, invoice *models.Invoice) error
 	DeleteInvoice(ctx context.Context, id uuid.UUID) error
 	CheckForOverdueInvoices(ctx context.Context) ([]models.Invoice, error)
+	RecalculateInvoiceAfterPaymentWithNewItems(ctx context.Context, invoiceID uuid.UUID, newCustomLineItems []models.CustomLineItems) (*models.Invoice, error)
 }

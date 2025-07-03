@@ -3,7 +3,7 @@
 
 // Example format:
 /**
-Hi, <name>,
+Hi, <n>,
 
 <body text>
 
@@ -17,11 +17,16 @@ Best,
 */
 
 import { useState, useEffect } from "react"
-import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { sendCustomEmail, saveDraftEmail, loadDraftEmail, clearDraftEmail } from "../services/sendEmail"
+import { generatePaymentUrl } from "../services/paymentUrl"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { EmailHeadersSection } from "./shared/EmailHeadersSection"
+import { EmailContentSection } from "./shared/EmailContentSection"
+import { EmailDraftControls } from "./shared/EmailDraftControls"
+import { PaymentButtonSection } from "./shared/PaymentButtonSection"
+import { EmailHeaders } from "../types"
 
 interface EmailModalProps {
   requestId: string
@@ -44,16 +49,17 @@ Best regards,
 ${adminName}`;
 
   const [emailContent, setEmailContent] = useState(defaultContent)
-  const [emailHeaders, setEmailHeaders] = useState({
+  const [emailHeaders, setEmailHeaders] = useState<EmailHeaders>({
     subject: defaultSubject,
-    cc: [] as string[],
-    bcc: [] as string[],
+    cc: [],
+    bcc: [],
     replyTo: `${adminName} <support@evershift.co>`
   })
   const [isLoading, setIsLoading] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
   const [isSavingDraft, setIsSavingDraft] = useState(false)
   const [selectedPDF, setSelectedPDF] = useState<File | null>(null)
+  const [includePaymentButton, setIncludePaymentButton] = useState(false)
 
   useEffect(() => {
     const cachedData = loadDraftEmail(requestId);
@@ -79,9 +85,21 @@ ${adminName}`;
     setIsLoading(true)
     
     try {
-      await sendCustomEmail(requestId, emailContent, emailHeaders, selectedPDF);
+      let paymentUrl: string | undefined;
       
-      alert(`Email sent successfully!\n\nCustom email has been sent to ${clientName}${selectedPDF ? ' with PDF attached' : ''}.`)
+      // Generate payment URL if payment button is enabled
+      if (includePaymentButton) {
+        try {
+          paymentUrl = await generatePaymentUrl(requestId);
+        } catch (error) {
+          console.error('Failed to generate payment URL:', error);
+          alert('Failed to generate payment link. Email will be sent without payment button.');
+        }
+      }
+
+      await sendCustomEmail(requestId, emailContent, emailHeaders, selectedPDF, paymentUrl);
+      
+      alert(`Email sent successfully!\n\nCustom email has been sent to ${clientName}${selectedPDF ? ' with PDF attached' : ''}${paymentUrl ? ' with payment button' : ''}.`)
       
       setTimeout(() => {
         onClose()
@@ -129,89 +147,37 @@ ${adminName}`;
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Send Custom Email</h2>
-        {hasDraft && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-blue-600">Draft available</span>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={handleClearDraft}
-              className="text-xs h-6 px-2"
-            >
-              Clear Draft
-            </Button>
-          </div>
-        )}
-      </div>
-      
-      {/* Email Headers Section */}
-      <div className="space-y-3 p-4 border rounded-lg bg-gray-50">
-        <h3 className="text-sm font-medium">Email Headers</h3>
-        
-        <div className="space-y-2">
-          <Label htmlFor="subject" className="text-sm">Subject</Label>
-          <Input
-            id="subject"
-            value={emailHeaders.subject}
-            onChange={(e) => setEmailHeaders(prev => ({ ...prev, subject: e.target.value }))}
-            placeholder="Email subject..."
-            className="text-sm"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="replyTo" className="text-sm">Reply To</Label>
-          <Input
-            id="replyTo"
-            value={emailHeaders.replyTo}
-            onChange={(e) => setEmailHeaders(prev => ({ ...prev, replyTo: e.target.value }))}
-            placeholder="Reply-to email..."
-            className="text-sm"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="cc" className="text-sm">CC (comma-separated)</Label>
-            <Input
-              id="cc"
-              value={emailHeaders.cc.join(', ')}
-              onChange={(e) => setEmailHeaders(prev => ({ 
-                ...prev, 
-                cc: e.target.value.split(',').map(email => email.trim()).filter(Boolean)
-              }))}
-              placeholder="cc@example.com, cc2@example.com"
-              className="text-sm"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="bcc" className="text-sm">BCC (comma-separated)</Label>
-            <Input
-              id="bcc"
-              value={emailHeaders.bcc.join(', ')}
-              onChange={(e) => setEmailHeaders(prev => ({ 
-                ...prev, 
-                bcc: e.target.value.split(',').map(email => email.trim()).filter(Boolean)
-              }))}
-              placeholder="bcc@example.com, bcc2@example.com"
-              className="text-sm"
-            />
-          </div>
-        </div>
-      </div>
-      
-      {/* Email Content */}
-      <div className="space-y-2">
-        <Label htmlFor="content" className="text-sm">Message</Label>
-        <Textarea
-          id="content"
-          value={emailContent}
-          onChange={(e) => setEmailContent(e.target.value)}
-          placeholder="Enter your email message..."
-          className="min-h-[200px] resize-none"
+        <EmailDraftControls
+          hasDraft={hasDraft}
+          hasChanges={hasChanges}
+          isSavingDraft={isSavingDraft}
+          onSaveDraft={handleSaveDraft}
+          onClearDraft={handleClearDraft}
+          disabled={isLoading}
         />
       </div>
+      
+      {/* Email Headers Section - Using shared component */}
+      <EmailHeadersSection
+        headers={emailHeaders}
+        onHeadersChange={setEmailHeaders}
+        disabled={isLoading}
+      />
+      
+      {/* Email Content - Using shared component */}
+      <EmailContentSection
+        content={emailContent}
+        onContentChange={setEmailContent}
+        placeholder="Enter your email message..."
+        disabled={isLoading}
+      />
+
+      {/* Payment Button Section */}
+      <PaymentButtonSection
+        includePaymentButton={includePaymentButton}
+        onTogglePaymentButton={setIncludePaymentButton}
+        disabled={isLoading}
+      />
 
       {/* PDF Attachment Section */}
       <div className="space-y-3 p-4 border rounded-lg bg-gray-50">
@@ -246,15 +212,6 @@ ${adminName}`;
           className="flex-1"
         >
           {isLoading ? "Sending..." : "Send Email"}
-        </Button>
-        
-        <Button 
-          variant="secondary"
-          onClick={handleSaveDraft}
-          disabled={isSavingDraft || !hasChanges}
-          className="px-4"
-        >
-          {isSavingDraft ? "Saving..." : "Save as Draft"}
         </Button>
         
         <Button 
