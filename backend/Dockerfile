@@ -1,21 +1,41 @@
 # Multi-stage build for smaller final image
-FROM golang:1.24
+FROM golang:1.22-alpine AS builder
 
 WORKDIR /app
 
-RUN go install github.com/air-verse/air@latest
-RUN apt-get update && apt-get install -y postgresql-client
-RUN go install github.com/pressly/goose/v3/cmd/goose@latest
+# Install build dependencies
+RUN apk add --no-cache git
 
+# Copy go mod files
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Install goose for migrations
+RUN go install github.com/pressly/goose/v3/cmd/goose@latest
+
+# Copy source code
 COPY . .
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/api
 
+# Final stage
+FROM alpine:latest
+
+# Install ca-certificates for HTTPS requests and postgresql-client for migrations
+RUN apk --no-cache add ca-certificates postgresql-client tzdata
+
+WORKDIR /root/
+
+# Copy the binary from builder stage
+COPY --from=builder /app/main .
+COPY --from=builder /go/bin/goose .
+
+# Copy necessary files
+COPY --from=builder /app/internal ./internal
+
+# Expose port
 EXPOSE 3001
 
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["air", "-c", ".air.toml"]
+# Run the binary
+CMD ["./main"]
