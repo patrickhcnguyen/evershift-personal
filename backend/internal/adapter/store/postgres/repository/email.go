@@ -506,6 +506,12 @@ func (r *EmailRepository) ScheduleEmail(ctx context.Context, invoice *models.Inv
 		return fmt.Errorf("mailgun configuration missing")
 	}
 
+	// Check if Redis is available for scheduling
+	if r.redis == nil {
+		log.Printf("Warning: Redis not available, cannot schedule email for request %s", invoice.RequestID.String())
+		return fmt.Errorf("email scheduling unavailable (Redis not connected)")
+	}
+
 	var subject, htmlBody, replyTo string
 	var cc, bcc []string
 

@@ -34,6 +34,12 @@ func NewCronRepository(db *gorm.DB, redis *redis.Client, emailRepo *EmailReposit
 func (r *CronRepository) Run() error {
 	log.Println("[CRON] Starting scheduled email processor...")
 
+	// Check if Redis is available
+	if r.redis == nil {
+		log.Println("[CRON] Warning: Redis not available, skipping scheduled email processing")
+		return nil
+	}
+
 	err := r.scheduler.AddFunc("@every 1m", func() {
 		ctx := context.Background()
 		if err := r.ProcessScheduledEmails(ctx); err != nil {
@@ -61,6 +67,11 @@ func (r *CronRepository) Stop() error {
 }
 
 func (r *CronRepository) ProcessScheduledEmails(ctx context.Context) error {
+	// Check if Redis is available
+	if r.redis == nil {
+		return nil
+	}
+
 	now := time.Now().UTC()
 
 	emailIDs, err := r.redis.ZRangeByScore(ctx, "scheduled_emails", &redis.ZRangeBy{

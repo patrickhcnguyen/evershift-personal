@@ -46,10 +46,13 @@ func main() {
 	ctx := context.Background()
 	pong, err := redisClient.Ping(ctx).Result()
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		log.Printf("Warning: Failed to connect to Redis: %v", err)
+		log.Println("App will continue without Redis (email scheduling disabled)")
+		redisClient = nil
+	} else {
+		log.Printf("Redis connection successful: %s", pong)
+		log.Printf("Redis URL: %s", os.Getenv("REDIS_URL"))
 	}
-	log.Printf("Redis connection successful: %s", pong)
-	log.Printf("Redis URL: %s", os.Getenv("REDIS_URL"))
 
 	// Set up database connection
 	db, err := repositories.NewDatabase(cfg.DatabaseURL)
