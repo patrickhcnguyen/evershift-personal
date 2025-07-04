@@ -135,14 +135,14 @@ export function InvoiceCard() {
         customLineItemsData,
         requestData,
       ] = await Promise.all([
-        fetch(`http://localhost:3001/api/invoices/request/${requestId}`),
+        fetch(`${process.env.VITE_SERVER_URL}/api/invoices/request/${requestId}`),
         fetch(
-          `http://localhost:3001/api/staff-requirements/request/${requestId}`
+          `${process.env.VITE_SERVER_URL}/api/staff-requirements/request/${requestId}`
         ),
         fetch(
-          `http://localhost:3001/api/custom-line-items/request/${requestId}`
+          `${process.env.VITE_SERVER_URL}/api/custom-line-items/request/${requestId}`
         ),
-        fetch(`http://localhost:3001/api/requests/${requestId}`),
+        fetch(`${process.env.VITE_SERVER_URL}/api/requests/${requestId}`),
       ]);
 
       if (

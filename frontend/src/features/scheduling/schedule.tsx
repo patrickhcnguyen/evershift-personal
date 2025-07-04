@@ -81,7 +81,7 @@ export default function Schedule() {
 
       console.log('📡 Fetching invoices for branch:', userBranchId);
 
-      const invoicesResponse = await fetch(`http://localhost:3001/api/invoices/branch/${userBranchId}`, {
+      const invoicesResponse = await fetch(`${process.env.VITE_SERVER_URL}/api/invoices/branch/${userBranchId}`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -123,7 +123,7 @@ export default function Schedule() {
         try {
           console.log(`📡 Fetching request data for invoice ${invoice.id}, request ${invoice.request_id}`);
           
-          const requestResponse = await fetch(`http://localhost:3001/api/requests/${invoice.request_id}`, {
+          const requestResponse = await fetch(`${process.env.VITE_SERVER_URL}/api/requests/${invoice.request_id}`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json',
