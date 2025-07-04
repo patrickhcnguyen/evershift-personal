@@ -10,7 +10,7 @@ export interface PaymentUrlError {
 
 export const generatePaymentUrl = async (requestId: string): Promise<string> => {
   try {
-    const invoiceResponse = await fetch(`${process.env.VITE_SERVER_URL}/api/invoices/request/${requestId}`);
+    const invoiceResponse = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/invoices/request/${requestId}`);
     
     if (!invoiceResponse.ok) {
       throw new Error('Failed to fetch invoice');
@@ -19,7 +19,7 @@ export const generatePaymentUrl = async (requestId: string): Promise<string> => 
     const invoice = await invoiceResponse.json();
     const invoiceUUID = invoice.UUID;
     
-    const response = await fetch(`${process.env.VITE_SERVER_URL}/api/stripe/create-checkout-session/${invoiceUUID}`, {
+    const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/stripe/create-checkout-session/${invoiceUUID}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

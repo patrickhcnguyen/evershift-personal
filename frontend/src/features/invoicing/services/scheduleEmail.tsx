@@ -14,7 +14,7 @@ export const scheduleEmail = async (
     scheduledDate.setDate(scheduledDate.getDate() + daysFromNow);
     const sendAt = scheduledDate.toISOString();
 
-    const response = await fetch(`${process.env.VITE_SERVER_URL}/api/emails/schedule/${requestId}`, {
+    const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/emails/schedule/${requestId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -48,7 +48,7 @@ export const scheduleEmailAtSpecificTime = async (
   sendAt: string
 ): Promise<ScheduleEmailResponse> => {
   try {
-    const response = await fetch(`${process.env.VITE_SERVER_URL}/api/emails/schedule/${requestId}`, {
+    const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/emails/schedule/${requestId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -97,7 +97,7 @@ export const scheduleCustomEmail = async (
       requestBody.payment_url = paymentUrl;
     }
 
-    const response = await fetch(`${process.env.VITE_SERVER_URL}/api/emails/schedule/${requestId}`, {
+    const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/emails/schedule/${requestId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -52,7 +52,7 @@ export const clearDraftEmail = (requestId: string): void => {
 
 export const sendInvoiceEmail = async (requestId: string): Promise<SendEmailResponse> => {
   try {
-    const response = await fetch(`${process.env.VITE_SERVER_URL}/api/emails/send/${requestId}`, {
+    const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/emails/send/${requestId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -99,7 +99,7 @@ export const sendCustomEmail = async (
       formData.append('paymentUrl', paymentUrl);
     }
 
-    const response = await fetch(`${process.env.VITE_SERVER_URL}/api/emails/send-custom/${requestId}`, {
+    const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/emails/send-custom/${requestId}`, {
       method: 'POST',
       body: formData,
     });

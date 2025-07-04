@@ -8,7 +8,7 @@ interface RefundError {
 
 export const refundInvoice = async (invoiceId: string): Promise<RefundResponse | RefundError> => {
     try {
-        const response = await fetch(`${process.env.VITE_SERVER_URL}/api/stripe/refund-payment/${invoiceId}`, {
+        const response = await fetch(`${import.meta.env.VITE_SERVER_URL}/api/stripe/refund-payment/${invoiceId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

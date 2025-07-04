@@ -109,8 +109,8 @@ export function InvoiceTable() {
       setAdminBranch(branchToFetch); 
       try {
         const [requestData, invoiceData] = await Promise.all([
-          fetch(`${process.env.VITE_SERVER_URL}/api/requests/branch/${branchToFetch}`),
-          fetch(`${process.env.VITE_SERVER_URL}/api/invoices/branch/${branchToFetch}`)
+          fetch(`${import.meta.env.VITE_SERVER_URL}/api/requests/branch/${branchToFetch}`),
+          fetch(`${import.meta.env.VITE_SERVER_URL}/api/invoices/branch/${branchToFetch}`)
         ]);
         
         if (!requestData.ok) {
